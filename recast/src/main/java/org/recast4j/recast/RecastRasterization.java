@@ -22,6 +22,15 @@ import static org.recast4j.recast.RecastConstants.RC_SPAN_MAX_HEIGHT;
 
 public class RecastRasterization {
 
+    /**
+     * 判断包围盒a和包围盒b是否产生碰撞
+     *
+     * @param amin 包围盒a的最小值顶点坐标
+     * @param amax 包围盒a的最大值顶点坐标
+     * @param bmin 包围盒b的最小值顶点坐标
+     * @param bmax 包围盒b的最大值顶点坐标
+     * @return true-两个包围盒碰撞了（即：两个包围盒有相交的部分）；false-两个包围盒未发生碰撞
+     */
     private static boolean overlapBounds(float[] amin, float[] amax, float[] bmin, float[] bmax) {
         boolean overlap = true;
         overlap = (amin[0] > bmax[0] || amax[0] < bmin[0]) ? false : overlap;
@@ -34,11 +43,18 @@ public class RecastRasterization {
      * The span addition can be set to favor flags. If the span is merged to another span and the new 'smax' is within
      * 'flagMergeThr' units from the existing span, the span flags are merged.
      *
+     * @param hf   高度场，计算好的span数据会被填充进去
+     * @param x    此span体素块所处的坐标，x轴方向（单位：cell）
+     * @param z    此span体素块所处的坐标，z轴方向（单位：cell）
+     * @param smin 此span最低位置所处的体素块坐标，y轴方向（单位：体素）
+     * @param smax 此span最高位置所处的体素块坐标，y轴方向（单位：体素）
+     * @param area 此span所处的三角形区域的可移动FLAG
      * @see Heightfield, Span.
      */
-    private static void addSpan(Heightfield hf, int x, int y, int smin, int smax, int area, int flagMergeThr) {
+    private static void addSpan(Heightfield hf, int x, int z, int smin, int smax, int area, int flagMergeThr) {
 
-        int idx = x + y * hf.width;
+        // idx是把整个地图的Heightfield的xz平面按照cell进行分格并编上索引，一个idx对应xz平面的一个cell
+        int idx = x + z * hf.width;
 
         Span s = new Span();
         s.smin = smin;
@@ -71,6 +87,8 @@ public class RecastRasterization {
                     s.smax = cur.smax;
 
                 // Merge flags.
+                // Math.abs(s.smax - cur.smax) > flagMergeThr 的情况发生于cur的smax值远小于s的smax值，但是cur的smax又大于s的smin值，s和cur还有一部分交叉
+                // 此时s和cur之间差距过大，不能进行area的合并，必须以s的area值为准。
                 if (Math.abs(s.smax - cur.smax) <= flagMergeThr)
                     s.area = Math.max(s.area, cur.area);
 
@@ -94,17 +112,39 @@ public class RecastRasterization {
         }
     }
 
-    // divides a convex polygons into two convex polygons on both sides of a line
+    /**
+     * divides a convex polygons into two convex polygons on both sides of a line
+     *
+     * @param buf  一个数据缓存数组，可以存放很多东西，包括本函数运算时需要用到的数据和本函数运算产生的数据
+     * @param in   从buf数组中读取数据的起始索引
+     * @param nin  待拆分的多边形的顶点数
+     * @param out1 往buf数组中输出数据时的起始索引一，从out1开始的数据是已经划分到x直线里面的坐标点信息
+     * @param out2 往buf数组中输出数据时的起始索引二，从out2开始的数据是尚未划分到x直线里面的坐标点信息
+     * @param x    划分线（dividing line），x和axis结合可以画出一条直线，此直线对多边形进行划分
+     * @param axis 代表坐标轴，0-x轴；1-y轴；2-z轴。
+     * @return 返回一个数组[m, n]，其中m表示划分到x直线里面的顶点数量,n表示尚未划分到x直线里面的顶点数量。注意，这个顶点不止包括多边形的顶点，还包括在划分过程中，多边形与x直线的交点。
+     */
     private static int[] dividePoly(float[] buf, int in, int nin, int out1, int out2, float x, int axis) {
-        float d[] = new float[12];
-        for (int i = 0; i < nin; ++i)
+        // 数组d是用来判断多边形的各个顶点在axis轴上x坐标点的哪个方向
+        // 假设axis为2，表示z轴，
+        // tmin表示多边形的AABB包围盒的最小值顶点，
+        // z轴的点(0,0,tmin[2]+cellSize）处可以画一条直线，这条直线与多边形的AABB包围盒的边之间差一个cell
+        // 数组d就可以用来判断多边形的各个顶点是否在这条直线的同一边
+        // d[i]<0，表示顶点i在这条直线的上方；d[i]>0表示顶点i在这条直线的下方。
+        // d[i]的绝对值表示的是顶点与这条直线之间的距离
+        float[] d = new float[12];
+        for (int i = 0; i < nin; ++i) {
             d[i] = x - buf[in + i * 3 + axis];
+        }
 
         int m = 0, n = 0;
         for (int i = 0, j = nin - 1; i < nin; j = i, ++i) {
             boolean ina = d[j] >= 0;
             boolean inb = d[i] >= 0;
             if (ina != inb) {
+                // 接下来的7行代码，主要是处理顶点i和顶点j连线与x直线交点的那个点。
+                // 走到此处表明顶点i和顶点j在x直线的两边，那么这两个顶点的连线一定会与x直线相交
+                // 交点坐标值的计算运用了相似三角形运算方式
                 float s = d[j] / (d[j] - d[i]);
                 buf[out1 + m * 3 + 0] = buf[in + j * 3 + 0] + (buf[in + i * 3 + 0] - buf[in + j * 3 + 0]) * s;
                 buf[out1 + m * 3 + 1] = buf[in + j * 3 + 1] + (buf[in + i * 3 + 1] - buf[in + j * 3 + 1]) * s;
@@ -134,14 +174,15 @@ public class RecastRasterization {
                 n++;
             }
         }
-        return new int[] { m, n };
+        return new int[]{m, n};
     }
 
     private static void rasterizeTri(float[] verts, int v0, int v1, int v2, int area, Heightfield hf, float[] bmin,
-            float[] bmax, float cs, float ics, float ich, int flagMergeThr) {
+                                     float[] bmax, float cs, float ics, float ich, int flagMergeThr) {
         int w = hf.width;
         int h = hf.height;
         float tmin[] = new float[3], tmax[] = new float[3];
+        // by是整个世界的高度（y轴）
         float by = bmax[1] - bmin[1];
 
         // Calculate the bounding box of the triangle.
@@ -156,13 +197,31 @@ public class RecastRasterization {
         if (!overlapBounds(bmin, bmax, tmin, tmax))
             return;
 
-        // Calculate the footprint of the triangle on the grid's y-axis
-        int y0 = (int) ((tmin[2] - bmin[2]) * ics);
-        int y1 = (int) ((tmax[2] - bmin[2]) * ics);
-        y0 = RecastCommon.clamp(y0, 0, h - 1);
-        y1 = RecastCommon.clamp(y1, 0, h - 1);
+        // Calculate the footprint of the triangle on the grid's z-axis
+        int z0 = (int) ((tmin[2] - bmin[2]) * ics);
+        int z1 = (int) ((tmax[2] - bmin[2]) * ics);
+        z0 = RecastCommon.clamp(z0, 0, h - 1);
+        z1 = RecastCommon.clamp(z1, 0, h - 1);
 
         // Clip the triangle into all grid cells it touches.
+        // in、inrow、p1、p2这四个变量把整个buf数组分成了四等份，
+        // buf里面存放的是顶点坐标值信息，每等份可以存放7个顶点信息，
+        // 这就表明光栅化过程中，每次切割所得的多边形最多只能有六个顶点，
+        // 6+1=7，之所以多留出一个顶点信息的位置，是因为：如果某次切分多边形(v0,v1,v2)时，恰好有一个顶点（v0）在切分线上，那么这个顶点会被加入out1中两次，
+        // 因此，如果此次切分结果是个三角形，有3个顶点，那么out1中最终会存储4个顶点信息。
+        // out1对应于dividePoly()接口中的参数。
+        // 在迭代过程中，这四等份数据的作用会交替变换，不断被覆盖。
+        // |    in    |    inrow    |    p1    |    p2    |
+        // 如上图所示，我们来进行一次迭代演示，
+        // 初始顶点信息存放于in中，
+        // 第一次沿z轴划分，从in中读取数据，分好的点放入inrow，尚未分好的放入p1，然后交换in和p1
+        // |    p1    |    inrow    |    in    |    p2    |
+        // 第一次沿x轴划分，从inrow中读取数据，分好的点放入p1，此时p1中原来的顶点信息被覆盖，尚未分好的点放入p2，然后交换p2和inrow
+        // |    p1    |    p2    |    in    |    inrow    |
+        // 第二次沿x轴划分，从inrow中读取数据，分好的点放入p1，此时p1中原来的顶点信息被覆盖，尚未分好的点放入p2，然后交换p2和inrow
+        // |    p1    |    inrow    |    in    |    p2    |
+        // 第二次沿z轴，从in中读取数据，分好的点放入inrow，尚未分好的放入p1，然后交换in和p1
+        // |    in    |    inrow    |    p1    |    p2    |
         float buf[] = new float[7 * 3 * 4];
         int in = 0;
         int inrow = 7 * 3;
@@ -174,9 +233,10 @@ public class RecastRasterization {
         RecastVectors.copy(buf, 6, verts, v2 * 3);
         int nvrow, nvIn = 3;
 
-        for (int y = y0; y <= y1; ++y) {
+        for (int z = z0; z <= z1; ++z) {
+            // 先沿着z轴将多边形划分成一行一行的
             // Clip polygon to row. Store the remaining polygon as well
-            float cz = bmin[2] + y * cs;
+            float cz = bmin[2] + z * cs;
             int[] nvrowin = dividePoly(buf, in, nvIn, inrow, p1, cz + cs, 2);
             nvrow = nvrowin[0];
             nvIn = nvrowin[1];
@@ -188,6 +248,7 @@ public class RecastRasterization {
             if (nvrow < 3)
                 continue;
 
+            // 再沿着x轴将多边形划分成一列一列的
             // find the horizontal bounds in the row
             float minX = buf[inrow], maxX = buf[inrow];
             for (int i = 1; i < nvrow; ++i) {
@@ -239,7 +300,7 @@ public class RecastRasterization {
                 int ismin = RecastCommon.clamp((int) Math.floor(smin * ich), 0, RC_SPAN_MAX_HEIGHT);
                 int ismax = RecastCommon.clamp((int) Math.ceil(smax * ich), ismin + 1, RC_SPAN_MAX_HEIGHT);
 
-                addSpan(hf, x, y, ismin, ismax, area, flagMergeThr);
+                addSpan(hf, x, z, ismin, ismax, area, flagMergeThr);
             }
         }
     }
@@ -250,7 +311,7 @@ public class RecastRasterization {
      * @see Heightfield
      */
     public static void rasterizeTriangle(Context ctx, float[] verts, int v0, int v1, int v2, int area,
-            Heightfield solid, int flagMergeThr) {
+                                         Heightfield solid, int flagMergeThr) {
 
         ctx.startTimer("RASTERIZE_TRIANGLES");
 
@@ -262,12 +323,13 @@ public class RecastRasterization {
     }
 
     /**
+     * 对组成地图的三角形进行光栅化处理
      * Spans will only be added for triangles that overlap the heightfield grid.
      *
      * @see Heightfield
      */
     public static void rasterizeTriangles(Context ctx, float[] verts, int[] tris, int[] areas, int nt,
-            Heightfield solid, int flagMergeThr) {
+                                          Heightfield solid, int flagMergeThr) {
 
         ctx.startTimer("RASTERIZE_TRIANGLES");
 
@@ -291,7 +353,7 @@ public class RecastRasterization {
      * @see Heightfield
      */
     public static void rasterizeTriangles(Context ctx, float[] verts, int[] areas, int nt, Heightfield solid,
-            int flagMergeThr) {
+                                          int flagMergeThr) {
         ctx.startTimer("RASTERIZE_TRIANGLES");
 
         float ics = 1.0f / solid.cs;

@@ -37,6 +37,14 @@ public class RecastRegion {
         int nei; // neighbour id
     }
 
+    /**
+     * 计算CompactHeightfield中各个Cell距离边界的距离
+     * 计算逻辑与{@link RecastArea#erodeWalkableArea}一致
+     *
+     * @param chf 空心高度场
+     * @param src 用于存储距离计算结果，计算出的距离单位是“半个体素块”
+     * @return 与边界的最大距离
+     */
     public static int calculateDistanceField(CompactHeightfield chf, int[] src) {
         int maxDist;
         int w = chf.width;
@@ -48,9 +56,9 @@ public class RecastRegion {
         }
 
         // Mark boundary cells.
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     CompactSpan s = chf.spans[i];
                     int area = chf.areas[i];
@@ -59,8 +67,8 @@ public class RecastRegion {
                     for (int dir = 0; dir < 4; ++dir) {
                         if (RecastCommon.GetCon(s, dir) != RC_NOT_CONNECTED) {
                             int ax = x + RecastCommon.GetDirOffsetX(dir);
-                            int ay = y + RecastCommon.GetDirOffsetY(dir);
-                            int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, dir);
+                            int az = z + RecastCommon.GetDirOffsetY(dir);
+                            int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, dir);
                             if (area == chf.areas[ai]) {
                                 nc++;
                             }
@@ -74,17 +82,17 @@ public class RecastRegion {
         }
 
         // Pass 1
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     CompactSpan s = chf.spans[i];
 
                     if (RecastCommon.GetCon(s, 0) != RC_NOT_CONNECTED) {
                         // (-1,0)
                         int ax = x + RecastCommon.GetDirOffsetX(0);
-                        int ay = y + RecastCommon.GetDirOffsetY(0);
-                        int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, 0);
+                        int az = z + RecastCommon.GetDirOffsetY(0);
+                        int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, 0);
                         CompactSpan as = chf.spans[ai];
                         if (src[ai] + 2 < src[i]) {
                             src[i] = src[ai] + 2;
@@ -93,8 +101,8 @@ public class RecastRegion {
                         // (-1,-1)
                         if (RecastCommon.GetCon(as, 3) != RC_NOT_CONNECTED) {
                             int aax = ax + RecastCommon.GetDirOffsetX(3);
-                            int aay = ay + RecastCommon.GetDirOffsetY(3);
-                            int aai = chf.cells[aax + aay * w].index + RecastCommon.GetCon(as, 3);
+                            int aaz = az + RecastCommon.GetDirOffsetY(3);
+                            int aai = chf.cells[aax + aaz * w].index + RecastCommon.GetCon(as, 3);
                             if (src[aai] + 3 < src[i]) {
                                 src[i] = src[aai] + 3;
                             }
@@ -103,8 +111,8 @@ public class RecastRegion {
                     if (RecastCommon.GetCon(s, 3) != RC_NOT_CONNECTED) {
                         // (0,-1)
                         int ax = x + RecastCommon.GetDirOffsetX(3);
-                        int ay = y + RecastCommon.GetDirOffsetY(3);
-                        int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, 3);
+                        int az = z + RecastCommon.GetDirOffsetY(3);
+                        int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, 3);
                         CompactSpan as = chf.spans[ai];
                         if (src[ai] + 2 < src[i]) {
                             src[i] = src[ai] + 2;
@@ -113,8 +121,8 @@ public class RecastRegion {
                         // (1,-1)
                         if (RecastCommon.GetCon(as, 2) != RC_NOT_CONNECTED) {
                             int aax = ax + RecastCommon.GetDirOffsetX(2);
-                            int aay = ay + RecastCommon.GetDirOffsetY(2);
-                            int aai = chf.cells[aax + aay * w].index + RecastCommon.GetCon(as, 2);
+                            int aaz = az + RecastCommon.GetDirOffsetY(2);
+                            int aai = chf.cells[aax + aaz * w].index + RecastCommon.GetCon(as, 2);
                             if (src[aai] + 3 < src[i]) {
                                 src[i] = src[aai] + 3;
                             }
@@ -125,17 +133,17 @@ public class RecastRegion {
         }
 
         // Pass 2
-        for (int y = h - 1; y >= 0; --y) {
+        for (int z = h - 1; z >= 0; --z) {
             for (int x = w - 1; x >= 0; --x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     CompactSpan s = chf.spans[i];
 
                     if (RecastCommon.GetCon(s, 2) != RC_NOT_CONNECTED) {
                         // (1,0)
                         int ax = x + RecastCommon.GetDirOffsetX(2);
-                        int ay = y + RecastCommon.GetDirOffsetY(2);
-                        int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, 2);
+                        int az = z + RecastCommon.GetDirOffsetY(2);
+                        int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, 2);
                         CompactSpan as = chf.spans[ai];
                         if (src[ai] + 2 < src[i]) {
                             src[i] = src[ai] + 2;
@@ -144,8 +152,8 @@ public class RecastRegion {
                         // (1,1)
                         if (RecastCommon.GetCon(as, 1) != RC_NOT_CONNECTED) {
                             int aax = ax + RecastCommon.GetDirOffsetX(1);
-                            int aay = ay + RecastCommon.GetDirOffsetY(1);
-                            int aai = chf.cells[aax + aay * w].index + RecastCommon.GetCon(as, 1);
+                            int aaz = az + RecastCommon.GetDirOffsetY(1);
+                            int aai = chf.cells[aax + aaz * w].index + RecastCommon.GetCon(as, 1);
                             if (src[aai] + 3 < src[i]) {
                                 src[i] = src[aai] + 3;
                             }
@@ -154,8 +162,8 @@ public class RecastRegion {
                     if (RecastCommon.GetCon(s, 1) != RC_NOT_CONNECTED) {
                         // (0,1)
                         int ax = x + RecastCommon.GetDirOffsetX(1);
-                        int ay = y + RecastCommon.GetDirOffsetY(1);
-                        int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, 1);
+                        int az = z + RecastCommon.GetDirOffsetY(1);
+                        int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, 1);
                         CompactSpan as = chf.spans[ai];
                         if (src[ai] + 2 < src[i]) {
                             src[i] = src[ai] + 2;
@@ -164,8 +172,8 @@ public class RecastRegion {
                         // (-1,1)
                         if (RecastCommon.GetCon(as, 0) != RC_NOT_CONNECTED) {
                             int aax = ax + RecastCommon.GetDirOffsetX(0);
-                            int aay = ay + RecastCommon.GetDirOffsetY(0);
-                            int aai = chf.cells[aax + aay * w].index + RecastCommon.GetCon(as, 0);
+                            int aaz = az + RecastCommon.GetDirOffsetY(0);
+                            int aai = chf.cells[aax + aaz * w].index + RecastCommon.GetCon(as, 0);
                             if (src[aai] + 3 < src[i]) {
                                 src[i] = src[aai] + 3;
                             }
@@ -183,6 +191,18 @@ public class RecastRegion {
         return maxDist;
     }
 
+    /**
+     * 使CompactHeightfield中每个span到边界的距离更加顺滑
+     * <p>
+     * 实现逻辑：
+     * 1.以待调整span为中心，把周围九宫格的邻居的原始距离（src）加总起来，然后进行平均化
+     * 2.如果九宫格中有邻居不存在，就把自身的src加一遍，用来进行平均
+     *
+     * @param chf
+     * @param thr
+     * @param src
+     * @return
+     */
     private static int[] boxBlur(CompactHeightfield chf, int thr, int[] src) {
         int w = chf.width;
         int h = chf.height;
@@ -190,9 +210,9 @@ public class RecastRegion {
 
         thr *= 2;
 
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     CompactSpan s = chf.spans[i];
                     int cd = src[i];
@@ -205,16 +225,17 @@ public class RecastRegion {
                     for (int dir = 0; dir < 4; ++dir) {
                         if (RecastCommon.GetCon(s, dir) != RC_NOT_CONNECTED) {
                             int ax = x + RecastCommon.GetDirOffsetX(dir);
-                            int ay = y + RecastCommon.GetDirOffsetY(dir);
-                            int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, dir);
+                            int az = z + RecastCommon.GetDirOffsetY(dir);
+                            int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, dir);
                             d += src[ai];
 
                             CompactSpan as = chf.spans[ai];
+                            // 方向往后移，此算法的作用和取模一样
                             int dir2 = (dir + 1) & 0x3;
                             if (RecastCommon.GetCon(as, dir2) != RC_NOT_CONNECTED) {
                                 int ax2 = ax + RecastCommon.GetDirOffsetX(dir2);
-                                int ay2 = ay + RecastCommon.GetDirOffsetY(dir2);
-                                int ai2 = chf.cells[ax2 + ay2 * w].index + RecastCommon.GetCon(as, dir2);
+                                int az2 = az + RecastCommon.GetDirOffsetY(dir2);
+                                int ai2 = chf.cells[ax2 + az2 * w].index + RecastCommon.GetCon(as, dir2);
                                 d += src[ai2];
                             } else {
                                 d += cd;
@@ -230,8 +251,8 @@ public class RecastRegion {
         return dst;
     }
 
-    private static boolean floodRegion(int x, int y, int i, int level, int r, CompactHeightfield chf, int[] srcReg,
-            int[] srcDist, List<Integer> stack) {
+    private static boolean floodRegion(int x, int z, int i, int level, int r, CompactHeightfield chf, int[] srcReg,
+                                       int[] srcDist, List<Integer> stack) {
         int w = chf.width;
 
         int area = chf.areas[i];
@@ -239,7 +260,7 @@ public class RecastRegion {
         // Flood fill mark region.
         stack.clear();
         stack.add(x);
-        stack.add(y);
+        stack.add(z);
         stack.add(i);
         srcReg[i] = r;
         srcDist[i] = 0;
@@ -249,7 +270,7 @@ public class RecastRegion {
 
         while (stack.size() > 0) {
             int ci = stack.remove(stack.size() - 1);
-            int cy = stack.remove(stack.size() - 1);
+            int cz = stack.remove(stack.size() - 1);
             int cx = stack.remove(stack.size() - 1);
 
             CompactSpan cs = chf.spans[ci];
@@ -260,8 +281,8 @@ public class RecastRegion {
                 // 8 connected
                 if (RecastCommon.GetCon(cs, dir) != RC_NOT_CONNECTED) {
                     int ax = cx + RecastCommon.GetDirOffsetX(dir);
-                    int ay = cy + RecastCommon.GetDirOffsetY(dir);
-                    int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(cs, dir);
+                    int az = cz + RecastCommon.GetDirOffsetY(dir);
+                    int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(cs, dir);
                     if (chf.areas[ai] != area) {
                         continue;
                     }
@@ -279,8 +300,8 @@ public class RecastRegion {
                     int dir2 = (dir + 1) & 0x3;
                     if (RecastCommon.GetCon(as, dir2) != RC_NOT_CONNECTED) {
                         int ax2 = ax + RecastCommon.GetDirOffsetX(dir2);
-                        int ay2 = ay + RecastCommon.GetDirOffsetY(dir2);
-                        int ai2 = chf.cells[ax2 + ay2 * w].index + RecastCommon.GetCon(as, dir2);
+                        int az2 = az + RecastCommon.GetDirOffsetY(dir2);
+                        int ai2 = chf.cells[ax2 + az2 * w].index + RecastCommon.GetCon(as, dir2);
                         if (chf.areas[ai2] != area) {
                             continue;
                         }
@@ -303,8 +324,8 @@ public class RecastRegion {
             for (int dir = 0; dir < 4; ++dir) {
                 if (RecastCommon.GetCon(cs, dir) != RC_NOT_CONNECTED) {
                     int ax = cx + RecastCommon.GetDirOffsetX(dir);
-                    int ay = cy + RecastCommon.GetDirOffsetY(dir);
-                    int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(cs, dir);
+                    int az = cz + RecastCommon.GetDirOffsetY(dir);
+                    int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(cs, dir);
                     if (chf.areas[ai] != area) {
                         continue;
                     }
@@ -312,7 +333,7 @@ public class RecastRegion {
                         srcReg[ai] = r;
                         srcDist[ai] = 0;
                         stack.add(ax);
-                        stack.add(ay);
+                        stack.add(az);
                         stack.add(ai);
                     }
                 }
@@ -323,7 +344,7 @@ public class RecastRegion {
     }
 
     private static int[] expandRegions(int maxIter, int level, CompactHeightfield chf, int[] srcReg, int[] srcDist,
-            List<Integer> stack, boolean fillStack) {
+                                       List<Integer> stack, boolean fillStack) {
         int w = chf.width;
         int h = chf.height;
 
@@ -361,9 +382,10 @@ public class RecastRegion {
 
             for (int j = 0; j < stack.size(); j += 3) {
                 int x = stack.get(j + 0);
-                int y = stack.get(j + 1);
+                int z = stack.get(j + 1);
                 int i = stack.get(j + 2);
                 if (i < 0) {
+                    // i<0，也即i==-1,表示该span在上一步的floodRegion过程中已经分配好regionId了
                     failed++;
                     continue;
                 }
@@ -377,8 +399,8 @@ public class RecastRegion {
                         continue;
                     }
                     int ax = x + RecastCommon.GetDirOffsetX(dir);
-                    int ay = y + RecastCommon.GetDirOffsetY(dir);
-                    int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, dir);
+                    int az = z + RecastCommon.GetDirOffsetY(dir);
+                    int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, dir);
                     if (chf.areas[ai] != area) {
                         continue;
                     }
@@ -421,8 +443,20 @@ public class RecastRegion {
         return srcReg;
     }
 
+    /**
+     * 收集一部分span，按“等级”进行划分。
+     * 按照span与障碍边界的距离，可以将span分为不同的等级。一个体素块的距离为一个等级，
+     * 假如某一span的 chf.dist[i]为10，表示该span与障碍边界的距离是10个“半体素块”，也就是5个“体素块”，其等级就是5
+     *
+     * @param startLevel        本次迭代，span的起始等级
+     * @param chf
+     * @param srcReg
+     * @param nbStacks          这一部分span一共要被划分为多少块
+     * @param stacks
+     * @param loglevelsPerStack 每一块可以存放几个“等级”的span
+     */
     private static void sortCellsByLevel(int startLevel, CompactHeightfield chf, int[] srcReg, int nbStacks,
-            List<List<Integer>> stacks, int loglevelsPerStack) // the levels per stack (2 in our case) as a bit shift
+                                         List<List<Integer>> stacks, int loglevelsPerStack) // the levels per stack (2 in our case) as a bit shift
     {
         int w = chf.width;
         int h = chf.height;
@@ -431,12 +465,11 @@ public class RecastRegion {
         for (int j = 0; j < nbStacks; ++j) {
             stacks.get(j).clear();
         }
-        ;
 
         // put all cells in the level range into the appropriate stacks
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     if (chf.areas[i] == RC_NULL_AREA || srcReg[i] != 0) {
                         continue;
@@ -445,6 +478,7 @@ public class RecastRegion {
                     int level = chf.dist[i] >> loglevelsPerStack;
                     int sId = startLevel - level;
                     if (sId >= nbStacks) {
+                        // 级别不够，本次迭代不予统计
                         continue;
                     }
                     if (sId < 0) {
@@ -452,7 +486,7 @@ public class RecastRegion {
                     }
 
                     stacks.get(sId).add(x);
-                    stacks.get(sId).add(y);
+                    stacks.get(sId).add(z);
                     stacks.get(sId).add(i);
                 }
             }
@@ -490,11 +524,13 @@ public class RecastRegion {
             floors = new ArrayList<>();
         }
 
-    };
+    }
+
+    ;
 
     private static void removeAdjacentNeighbours(Region reg) {
         // Remove adjacent duplicates.
-        for (int i = 0; i < reg.connections.size() && reg.connections.size() > 1;) {
+        for (int i = 0; i < reg.connections.size() && reg.connections.size() > 1; ) {
             int ni = (i + 1) % reg.connections.size();
             if (reg.connections.get(i) == reg.connections.get(ni)) {
                 reg.connections.remove(i);
@@ -625,7 +661,7 @@ public class RecastRegion {
     }
 
     private static void walkContour(int x, int y, int i, int dir, CompactHeightfield chf, int[] srcReg,
-            List<Integer> cont) {
+                                    List<Integer> cont) {
         int startDir = dir;
         int starti = i;
 
@@ -683,7 +719,7 @@ public class RecastRegion {
 
         // Remove adjacent duplicates.
         if (cont.size() > 1) {
-            for (int j = 0; j < cont.size();) {
+            for (int j = 0; j < cont.size(); ) {
                 int nj = (j + 1) % cont.size();
                 if (cont.get(j) == cont.get(nj)) {
                     cont.remove(j);
@@ -695,7 +731,7 @@ public class RecastRegion {
     }
 
     private static int mergeAndFilterRegions(Context ctx, int minRegionArea, int mergeRegionSize, int maxRegionId,
-            CompactHeightfield chf, int[] srcReg, List<Integer> overlaps) {
+                                             CompactHeightfield chf, int[] srcReg, List<Integer> overlaps) {
         int w = chf.width;
         int h = chf.height;
 
@@ -943,7 +979,7 @@ public class RecastRegion {
     }
 
     private static int mergeAndFilterLayerRegions(Context ctx, int minRegionArea, int maxRegionId,
-            CompactHeightfield chf, int[] srcReg, List<Integer> overlaps) {
+                                                  CompactHeightfield chf, int[] srcReg, List<Integer> overlaps) {
         int w = chf.width;
         int h = chf.height;
 
@@ -1163,7 +1199,7 @@ public class RecastRegion {
     }
 
     private static void paintRectRegion(int minx, int maxx, int miny, int maxy, int regId, CompactHeightfield chf,
-            int[] srcReg) {
+                                        int[] srcReg) {
         int w = chf.width;
         for (int y = miny; y < maxy; ++y) {
             for (int x = minx; x < maxx; ++x) {
@@ -1197,7 +1233,7 @@ public class RecastRegion {
     ///
     /// @see rcCompactHeightfield, rcCompactSpan, rcBuildDistanceField, rcBuildRegionsMonotone, rcConfig
     public static void buildRegionsMonotone(Context ctx, CompactHeightfield chf, int borderSize, int minRegionArea,
-            int mergeRegionArea) {
+                                            int mergeRegionArea) {
         ctx.startTimer("BUILD_REGIONS");
 
         int w = chf.width;
@@ -1347,7 +1383,7 @@ public class RecastRegion {
     ///
     /// @see rcCompactHeightfield, rcCompactSpan, rcBuildDistanceField, rcBuildRegionsMonotone, rcConfig
     public static void buildRegions(Context ctx, CompactHeightfield chf, int borderSize, int minRegionArea,
-            int mergeRegionArea) {
+                                    int mergeRegionArea) {
         ctx.startTimer("BUILD_REGIONS");
 
         int w = chf.width;
@@ -1368,6 +1404,10 @@ public class RecastRegion {
         int[] srcDist = new int[chf.spanCount];
 
         int regionId = 1;
+        // 如果chf.maxDistance是偶数，那么level就等于chf.maxDistance
+        // 如果chf.maxDistance是奇数，那么level就等于chf.maxDistance+1
+        // chf.maxDistance是地图中距离边界最远的距离，单位是“半个体素块”
+        // 这样处理后，level一定能够被2整除
         int level = (chf.maxDistance + 1) & ~1;
 
         // TODO: Figure better formula, expandIters defines how much the
@@ -1397,6 +1437,8 @@ public class RecastRegion {
         int sId = -1;
         while (level > 0) {
             level = level >= 2 ? level - 2 : 0;
+            // NB_STACKS等于2的LOG_NB_STACKS次方，所以NB_STACKS - 1的二进制表示就是LOG_NB_STACKS个1
+            // 这一步的逻辑相当于是取模，从0到NB_STACKS-1循环取值
             sId = (sId + 1) & (NB_STACKS - 1);
 
             // ctx->startTimer(RC_TIMER_DIVIDE_TO_LEVELS);
@@ -1404,6 +1446,7 @@ public class RecastRegion {
             if (sId == 0) {
                 sortCellsByLevel(level, chf, srcReg, NB_STACKS, lvlStacks, 1);
             } else {
+                // 在上一步中没能分配到regionId的span，全部添加到这一步中来继续分配
                 appendStacks(lvlStacks.get(sId - 1), lvlStacks.get(sId), srcReg); // copy left overs from last level
             }
 
@@ -1421,10 +1464,10 @@ public class RecastRegion {
             // Mark new regions with IDs.
             for (int j = 0; j < lvlStacks.get(sId).size(); j += 3) {
                 int x = lvlStacks.get(sId).get(j);
-                int y = lvlStacks.get(sId).get(j + 1);
+                int z = lvlStacks.get(sId).get(j + 1);
                 int i = lvlStacks.get(sId).get(j + 2);
                 if (i >= 0 && srcReg[i] == 0) {
-                    if (floodRegion(x, y, i, level, regionId, chf, srcReg, srcDist, stack)) {
+                    if (floodRegion(x, z, i, level, regionId, chf, srcReg, srcDist, stack)) {
                         regionId++;
                     }
                 }

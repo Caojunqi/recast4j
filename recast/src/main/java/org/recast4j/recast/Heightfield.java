@@ -18,22 +18,41 @@ freely, subject to the following restrictions:
 */
 package org.recast4j.recast;
 
-/** Represents a heightfield layer within a layer set. */
+/**
+ * Represents a heightfield layer within a layer set.
+ */
 public class Heightfield {
 
-    /** The width of the heightfield. (Along the x-axis in cell units.) */
+    /**
+     * The width of the heightfield. (Along the x-axis in cell units.)
+     */
     public final int width;
-    /** The height of the heightfield. (Along the z-axis in cell units.) */
+    /**
+     * The height of the heightfield. (Along the z-axis in cell units.)
+     */
     public final int height;
-    /** The minimum bounds in world space. [(x, y, z)] */
+    /**
+     * The minimum bounds in world space. [(x, y, z)]
+     */
     public final float[] bmin;
-    /** The maximum bounds in world space. [(x, y, z)] */
+    /**
+     * The maximum bounds in world space. [(x, y, z)]
+     */
     public final float[] bmax;
-    /** The size of each cell. (On the xz-plane.) */
+    /**
+     * The size of each cell. (On the xz-plane.)
+     */
     public final float cs;
-    /** The height of each cell. (The minimum increment along the y-axis.) */
+    /**
+     * The height of each cell. (The minimum increment along the y-axis.)
+     */
     public final float ch;
-    /** Heightfield of spans (width*height). */
+    /**
+     * Heightfield of spans (width*height).
+     * 数据结构解释：将Heightfield在xz平面上的投影进行分格，x轴方向上有width个格子，z轴方向上有height个格子，对每个格子进行编号，编号为x+z*width
+     * 每个格子上对应一个处于最底层的Span，所以spans中一共有width*height个格子
+     * Span的next是位于同一格上，处于自己正上方的Span
+     */
     public final Span[] spans;
 
     public Heightfield(int width, int height, float[] bmin, float[] bmax, float cs, float ch) {

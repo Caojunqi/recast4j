@@ -35,7 +35,7 @@ public class RecastCommon {
     /// @return The width offset to apply to the current cell position to move
     /// in the direction.
     static int GetDirOffsetX(int dir) {
-        int offset[] = { -1, 0, 1, 0, };
+        int offset[] = {-1, 0, 1, 0,};
         return offset[dir & 0x03];
     }
 
@@ -44,7 +44,7 @@ public class RecastCommon {
     /// @return The height offset to apply to the current cell position to move
     /// in the direction.
     static int GetDirOffsetY(int dir) {
-        int offset[] = { 0, 1, 0, -1 };
+        int offset[] = {0, 1, 0, -1};
         return offset[dir & 0x03];
     }
 
@@ -53,7 +53,7 @@ public class RecastCommon {
     /// @param[in] y The y offset. [Limits: -1 <= value <= 1]
     /// @return The direction that represents the offset.
     static int rcGetDirForOffset(int x, int y) {
-        int dirs[] = { 3, 0, -1, 2, 1 };
+        int dirs[] = {3, 0, -1, 2, 1};
         return dirs[((y + 1) << 1) + x];
     }
 
@@ -64,9 +64,15 @@ public class RecastCommon {
     public static void SetCon(CompactSpan s, int dir, int i) {
         int shift = dir * 6;
         int con = s.con;
+        // 此处的位运算逻辑保证了CompactSpan在一个方向上只会有一个可连接邻居，
+        // 例如，s在0方向上可以与第1层的邻居相连，然后又可以与第2层的邻居相连（当然，这种情况是不可能发生的）
+        // 那么第1层的连接信息就会被清空 (con & ~(0x3f << shift))就是起到一个清空连接信息的作用
         s.con = (con & ~(0x3f << shift)) | ((i & 0x3f) << shift);
     }
 
+    /**
+     * 把v值限制在[min,max]的范围内
+     */
     public static int clamp(int v, int min, int max) {
         return Math.max(Math.min(max, v), min);
     }

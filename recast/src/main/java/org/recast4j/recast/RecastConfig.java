@@ -23,34 +23,49 @@ import org.recast4j.recast.RecastConstants.PartitionType;
 public class RecastConfig {
     public final PartitionType partitionType;
 
-    /** The width/height size of tile's on the xz-plane. [Limit: >= 0] [Units: vx] **/
+    /**
+     * The width/height size of tile's on the xz-plane. [Limit: >= 0] [Units: vx]
+     **/
     public final int tileSize;
 
-    /** The xz-plane cell size to use for fields. [Limit: > 0] [Units: wu] **/
+    /**
+     * The xz-plane cell size to use for fields. [Limit: > 0] [Units: wu]
+     **/
     public final float cs;
 
-    /** The y-axis cell size to use for fields. [Limit: > 0] [Units: wu] **/
+    /**
+     * The y-axis cell size to use for fields. [Limit: > 0] [Units: wu]
+     **/
     public final float ch;
 
-    /** The maximum slope that is considered walkable. [Limits: 0 <= value < 90] [Units: Degrees] **/
+    /**
+     * The maximum slope that is considered walkable. [Limits: 0 <= value < 90] [Units: Degrees]
+     **/
     public final float walkableSlopeAngle;
 
     /**
      * Minimum floor to 'ceiling' height that will still allow the floor area to be considered walkable. [Limit: >= 3]
      * [Units: vx]
+     * 例如：桌子和地板，如果桌子和地板之间的空间高度大于walkableHeight，就表明AI单位可以从桌子下走过去，那么桌子下的那块地面就可以视为是可走区域
      **/
     public final int walkableHeight;
 
-    /** Maximum ledge height that is considered to still be traversable. [Limit: >=0] [Units: vx] **/
+    /**
+     * Maximum ledge height that is considered to still be traversable. [Limit: >=0] [Units: vx]
+     * 例如：两个台阶，如果两个台阶的高度差小于walkableClimb，那么就认为AI单位可以在这两个台阶之间移动
+     **/
     public final int walkableClimb;
 
     /**
      * The distance to erode/shrink the walkable area of the heightfield away from obstructions. [Limit: >=0] [Units:
      * vx]
+     * 半径距离，当span与边界的距离小于walkableRadius个体素块时，就认为span不是可走区域
      **/
     public final int walkableRadius;
 
-    /** The maximum allowed length for contour edges along the border of the mesh. [Limit: >=0] [Units: vx] **/
+    /**
+     * The maximum allowed length for contour edges along the border of the mesh. [Limit: >=0] [Units: vx]
+     **/
     public final int maxEdgeLen;
 
     /**
@@ -59,7 +74,9 @@ public class RecastConfig {
      **/
     public final float maxSimplificationError;
 
-    /** The minimum number of cells allowed to form isolated island areas. [Limit: >=0] [Units: vx] **/
+    /**
+     * The minimum number of cells allowed to form isolated island areas. [Limit: >=0] [Units: vx]
+     **/
     public final int minRegionArea;
 
     /**
@@ -92,19 +109,19 @@ public class RecastConfig {
     public final boolean filterWalkableLowHeightSpans;
 
     public RecastConfig(PartitionType partitionType, float cellSize, float cellHeight, float agentHeight,
-            float agentRadius, float agentMaxClimb, float agentMaxSlope, int regionMinSize, int regionMergeSize,
-            float edgeMaxLen, float edgeMaxError, int vertsPerPoly, float detailSampleDist, float detailSampleMaxError,
-            int tileSize, AreaModification walkableAreaMod) {
+                        float agentRadius, float agentMaxClimb, float agentMaxSlope, int regionMinSize, int regionMergeSize,
+                        float edgeMaxLen, float edgeMaxError, int vertsPerPoly, float detailSampleDist, float detailSampleMaxError,
+                        int tileSize, AreaModification walkableAreaMod) {
         this(partitionType, cellSize, cellHeight, agentHeight, agentRadius, agentMaxClimb, agentMaxSlope, regionMinSize,
                 regionMergeSize, edgeMaxLen, edgeMaxError, vertsPerPoly, detailSampleDist, detailSampleMaxError,
                 tileSize, walkableAreaMod, true, true, true);
     }
 
     public RecastConfig(PartitionType partitionType, float cellSize, float cellHeight, float agentHeight,
-            float agentRadius, float agentMaxClimb, float agentMaxSlope, int regionMinSize, int regionMergeSize,
-            float edgeMaxLen, float edgeMaxError, int vertsPerPoly, float detailSampleDist, float detailSampleMaxError,
-            int tileSize, AreaModification walkableAreaMod, boolean filterLowHangingObstacles, boolean filterLedgeSpans,
-            boolean filterWalkableLowHeightSpans) {
+                        float agentRadius, float agentMaxClimb, float agentMaxSlope, int regionMinSize, int regionMergeSize,
+                        float edgeMaxLen, float edgeMaxError, int vertsPerPoly, float detailSampleDist, float detailSampleMaxError,
+                        int tileSize, AreaModification walkableAreaMod, boolean filterLowHangingObstacles, boolean filterLedgeSpans,
+                        boolean filterWalkableLowHeightSpans) {
         this.partitionType = partitionType;
         cs = cellSize;
         ch = cellHeight;

@@ -64,12 +64,26 @@ public class RecastVectors {
         e0[2] = i[2] - verts[j + 2];
     }
 
+    /**
+     * 计算向量v1和向量v2的叉积（Cross product）
+     * Reference: http://mathworld.wolfram.com/CrossProduct.html
+     * Reference: http://en.wikipedia.org/wiki/Cross_product
+     *
+     * @param dest
+     * @param v1
+     * @param v2
+     */
     public static void cross(float[] dest, float[] v1, float[] v2) {
         dest[0] = v1[1] * v2[2] - v1[2] * v2[1];
         dest[1] = v1[2] * v2[0] - v1[0] * v2[2];
         dest[2] = v1[0] * v2[1] - v1[1] * v2[0];
     }
 
+    /**
+     * 向量标准化 （vector normalization）
+     * 即：把向量v变为一个长度为1的单位向量（unit vector）
+     * @param v
+     */
     public static void normalize(float[] v) {
         float d = (float) (1.0f / Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]));
         v[0] *= d;

@@ -24,14 +24,30 @@ import java.util.List;
 
 import org.recast4j.recast.AreaModification;
 import org.recast4j.recast.ConvexVolume;
+import org.recast4j.recast.Recast;
 import org.recast4j.recast.RecastVectors;
 
 public class SimpleInputGeomProvider implements InputGeomProvider {
 
+    /**
+     * 所有顶点坐标值信息集合，(x,y,z)三个坐标值组成一个顶点
+     */
     public final float[] vertices;
+    /**
+     * 所有三角形顶点信息集合，(v0,v1,v2)三个顶点组成一个三角形
+     */
     public final int[] faces;
+    /**
+     * 所有三角形的叉积标准化结果
+     */
     public final float[] normals;
+    /**
+     * 全体三角形组成的地图的AABB包围盒的最小值顶点
+     */
     final float[] bmin;
+    /**
+     * 全体三角形组成的地图的AABB包围盒的最大值顶点
+     */
     final float[] bmax;
     final List<ConvexVolume> volumes = new ArrayList<>();
 
@@ -99,6 +115,13 @@ public class SimpleInputGeomProvider implements InputGeomProvider {
         return Collections.singletonList(new TriMesh(vertices, faces));
     }
 
+    /**
+     * 把{@link SimpleInputGeomProvider#faces}中的顶点，三个三个一组(v0,v1,v2)，组成三角形。
+     * 向量e0为v0->v1；向量e1为v0->v2。计算向量叉积e0Xe1，并对叉积进行标准化。
+     * 然后将计算结果放入{@link SimpleInputGeomProvider#normals}中。
+     *
+     * @see Recast#markWalkableTriangles
+     */
     public void calculateNormals() {
         for (int i = 0; i < faces.length; i += 3) {
             int v0 = faces[i] * 3;

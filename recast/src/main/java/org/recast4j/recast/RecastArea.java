@@ -38,12 +38,13 @@ public class RecastArea {
         int h = chf.height;
         ctx.startTimer("ERODE_AREA");
 
+        // 为了不使用小数，dist数组中存放的距离的单位其实是半个vx(体素块)
         int[] dist = new int[chf.spanCount];
         Arrays.fill(dist, 255);
-        // Mark boundary cells.
-        for (int y = 0; y < h; ++y) {
+        // Mark boundary cells.  不满4个axis-neighbor的span被定义为边界块
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     if (chf.areas[i] == RC_NULL_AREA) {
                         dist[i] = 0;
@@ -53,8 +54,8 @@ public class RecastArea {
                         for (int dir = 0; dir < 4; ++dir) {
                             if (RecastCommon.GetCon(s, dir) != RC_NOT_CONNECTED) {
                                 int nx = x + RecastCommon.GetDirOffsetX(dir);
-                                int ny = y + RecastCommon.GetDirOffsetY(dir);
-                                int nidx = chf.cells[nx + ny * w].index + RecastCommon.GetCon(s, dir);
+                                int nz = z + RecastCommon.GetDirOffsetY(dir);
+                                int nidx = chf.cells[nx + nz * w].index + RecastCommon.GetCon(s, dir);
                                 if (chf.areas[nidx] != RC_NULL_AREA) {
                                     nc++;
                                 }
@@ -70,18 +71,28 @@ public class RecastArea {
 
         int nd;
 
-        // Pass 1
-        for (int y = 0; y < h; ++y) {
+        // 这种计算距离场（distance field）的算法叫distance transform。
+        // 示例图：
+        // A-----B-----C-----D
+        // |  S1 |  S2 |  S3 |
+        // E-----F-----G-----H
+        // |  S4 |  S5 |  S6 |
+        // I-----J-----K-----L
+        // |  S7 |  S8 |  S9 |
+        // M-----N-----O-----P
+        // 上图中，水平和垂直方向上两格之间的距离是2，斜方向上两格之间的距离是3（近似于2√2），即S1和S2的距离是2，S1和S4的距离是2，S1和S5的距离是3，单位是“半个体素块”
+        // Pass 1，先计算span与AM边和MP边的距离，所以span的遍历顺序为 S7->S8->S9->S4->S5->S6->S1->S2->S3
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     CompactSpan s = chf.spans[i];
 
                     if (RecastCommon.GetCon(s, 0) != RC_NOT_CONNECTED) {
                         // (-1,0)
                         int ax = x + RecastCommon.GetDirOffsetX(0);
-                        int ay = y + RecastCommon.GetDirOffsetY(0);
-                        int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, 0);
+                        int az = z + RecastCommon.GetDirOffsetY(0);
+                        int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, 0);
                         CompactSpan as = chf.spans[ai];
                         nd = Math.min(dist[ai] + 2, 255);
                         if (nd < dist[i])
@@ -90,8 +101,8 @@ public class RecastArea {
                         // (-1,-1)
                         if (RecastCommon.GetCon(as, 3) != RC_NOT_CONNECTED) {
                             int aax = ax + RecastCommon.GetDirOffsetX(3);
-                            int aay = ay + RecastCommon.GetDirOffsetY(3);
-                            int aai = chf.cells[aax + aay * w].index + RecastCommon.GetCon(as, 3);
+                            int aaz = az + RecastCommon.GetDirOffsetY(3);
+                            int aai = chf.cells[aax + aaz * w].index + RecastCommon.GetCon(as, 3);
                             nd = Math.min(dist[aai] + 3, 255);
                             if (nd < dist[i])
                                 dist[i] = nd;
@@ -100,8 +111,8 @@ public class RecastArea {
                     if (RecastCommon.GetCon(s, 3) != RC_NOT_CONNECTED) {
                         // (0,-1)
                         int ax = x + RecastCommon.GetDirOffsetX(3);
-                        int ay = y + RecastCommon.GetDirOffsetY(3);
-                        int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, 3);
+                        int az = z + RecastCommon.GetDirOffsetY(3);
+                        int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, 3);
                         CompactSpan as = chf.spans[ai];
                         nd = Math.min(dist[ai] + 2, 255);
                         if (nd < dist[i])
@@ -110,8 +121,8 @@ public class RecastArea {
                         // (1,-1)
                         if (RecastCommon.GetCon(as, 2) != RC_NOT_CONNECTED) {
                             int aax = ax + RecastCommon.GetDirOffsetX(2);
-                            int aay = ay + RecastCommon.GetDirOffsetY(2);
-                            int aai = chf.cells[aax + aay * w].index + RecastCommon.GetCon(as, 2);
+                            int aaz = az + RecastCommon.GetDirOffsetY(2);
+                            int aai = chf.cells[aax + aaz * w].index + RecastCommon.GetCon(as, 2);
                             nd = Math.min(dist[aai] + 3, 255);
                             if (nd < dist[i])
                                 dist[i] = nd;
@@ -121,18 +132,18 @@ public class RecastArea {
             }
         }
 
-        // Pass 2
-        for (int y = h - 1; y >= 0; --y) {
+        // Pass 2，再计算span与AD边和DP边的距离，所以span的遍历顺序为 S3->S2->S1->S6->S5->S4->S9->S8->S7
+        for (int z = h - 1; z >= 0; --z) {
             for (int x = w - 1; x >= 0; --x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     CompactSpan s = chf.spans[i];
 
                     if (RecastCommon.GetCon(s, 2) != RC_NOT_CONNECTED) {
                         // (1,0)
                         int ax = x + RecastCommon.GetDirOffsetX(2);
-                        int ay = y + RecastCommon.GetDirOffsetY(2);
-                        int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, 2);
+                        int az = z + RecastCommon.GetDirOffsetY(2);
+                        int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, 2);
                         CompactSpan as = chf.spans[ai];
                         nd = Math.min(dist[ai] + 2, 255);
                         if (nd < dist[i])
@@ -141,8 +152,8 @@ public class RecastArea {
                         // (1,1)
                         if (RecastCommon.GetCon(as, 1) != RC_NOT_CONNECTED) {
                             int aax = ax + RecastCommon.GetDirOffsetX(1);
-                            int aay = ay + RecastCommon.GetDirOffsetY(1);
-                            int aai = chf.cells[aax + aay * w].index + RecastCommon.GetCon(as, 1);
+                            int aaz = az + RecastCommon.GetDirOffsetY(1);
+                            int aai = chf.cells[aax + aaz * w].index + RecastCommon.GetCon(as, 1);
                             nd = Math.min(dist[aai] + 3, 255);
                             if (nd < dist[i])
                                 dist[i] = nd;
@@ -151,8 +162,8 @@ public class RecastArea {
                     if (RecastCommon.GetCon(s, 1) != RC_NOT_CONNECTED) {
                         // (0,1)
                         int ax = x + RecastCommon.GetDirOffsetX(1);
-                        int ay = y + RecastCommon.GetDirOffsetY(1);
-                        int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, 1);
+                        int az = z + RecastCommon.GetDirOffsetY(1);
+                        int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, 1);
                         CompactSpan as = chf.spans[ai];
                         nd = Math.min(dist[ai] + 2, 255);
                         if (nd < dist[i])
@@ -161,8 +172,8 @@ public class RecastArea {
                         // (-1,1)
                         if (RecastCommon.GetCon(as, 0) != RC_NOT_CONNECTED) {
                             int aax = ax + RecastCommon.GetDirOffsetX(0);
-                            int aay = ay + RecastCommon.GetDirOffsetY(0);
-                            int aai = chf.cells[aax + aay * w].index + RecastCommon.GetCon(as, 0);
+                            int aaz = az + RecastCommon.GetDirOffsetY(0);
+                            int aai = chf.cells[aax + aaz * w].index + RecastCommon.GetCon(as, 0);
                             nd = Math.min(dist[aai] + 3, 255);
                             if (nd < dist[i])
                                 dist[i] = nd;
@@ -172,6 +183,7 @@ public class RecastArea {
             }
         }
 
+        // dist数组存放的距离的单位是“半个体素块”，所以此处要对radius乘以2
         int thr = radius * 2;
         for (int i = 0; i < chf.spanCount; ++i)
             if (dist[i] < thr)
@@ -290,12 +302,21 @@ public class RecastArea {
 
     }
 
+    /**
+     * 判断指定点是否在多边形内部（xz平面内）
+     * @param verts 多边形顶点信息，三个值为一组，表示一个顶点坐标信息
+     * @param p 一个数组，拥有三个值，表示点p的三个坐标
+     * @return true-点p在多边形内部；false-点p不在多边形内部
+     */
     static boolean pointInPoly(float[] verts, float[] p) {
         boolean c = false;
         int i, j;
+        // 这里把多边形顶点相邻两两分为一组进行判断
         for (i = 0, j = verts.length - 3; i < verts.length; j = i, i += 3) {
             int vi = i;
             int vj = j;
+            // 判断逻辑一：从z轴方向上判断p是否在两个顶点的中间；判断逻辑二：从X轴方向上判断p是否在两个顶点连线的左边，使用了相似三角形。
+            // 如果p既在两个顶点中间，又在两个顶点连线的左边，就把上一步的判断结果取反。
             if (((verts[vi + 2] > p[2]) != (verts[vj + 2] > p[2]))
                     && (p[0] < (verts[vj] - verts[vi]) * (p[2] - verts[vi + 2]) / (verts[vj + 2] - verts[vi + 2])
                             + verts[vi]))

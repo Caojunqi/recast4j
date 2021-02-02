@@ -30,6 +30,10 @@ public class RecastFilter {
     /// @warning Will override the effect of #rcFilterLedgeSpans. So if both filters are used, call
     /// #rcFilterLedgeSpans after calling this filter.
     ///
+    /// 此方法的目的是把高度差小于walkableClimb的不可走span标记为可走
+    /// 就像楼梯，两个楼梯阶之间有一块垂直的平面，这个平面从RecastConfig#walkableSlopeAngle的角度來看是不可行走的，
+    /// 但是由于它和前一个span之间的高度差低于RecastConfig#walkableClimb，我们认为它是可以直接跨过的
+    ///
     /// @see rcHeightfield, rcConfig
     public static void filterLowHangingWalkableObstacles(Context ctx, int walkableClimb, Heightfield solid) {
 
@@ -38,13 +42,13 @@ public class RecastFilter {
         int w = solid.width;
         int h = solid.height;
 
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
                 Span ps = null;
                 boolean previousWalkable = false;
                 int previousArea = RecastConstants.RC_NULL_AREA;
 
-                for (Span s = solid.spans[x + y * w]; s != null; ps = s, s = s.next) {
+                for (Span s = solid.spans[x + z * w]; s != null; ps = s, s = s.next) {
                     boolean walkable = s.area != RecastConstants.RC_NULL_AREA;
                     // If current span is not walkable, but there is walkable
                     // span just below it, mark the span above it walkable too.
@@ -72,6 +76,10 @@ public class RecastFilter {
     ///
     /// A span is a ledge if: <tt>rcAbs(currentSpan.smax - neighborSpan.smax) > walkableClimb</tt>
     ///
+    /// 如果一个span处于悬崖边，或是处在一个陡峭的山坡上，就将此span标记为不可走
+    /// 判断一个span处于悬崖边：此span的4方向邻居中（ns1 ns2 ns3 ns4），最"深"的那个邻居与s的表面高度差超过了walkableClimb，就说s处在悬崖边，不可走
+    /// 判断一个span处在陡峭的山坡上：此span的4方向邻居中（ns1 ns2 ns3 ns4），最“高”的那个邻居和最“深”的那个邻居的表面高度差超过了walkableClimb，就说s处在陡峭的山坡上，不可走
+    ///
     /// @see rcHeightfield, rcConfig
     public static void filterLedgeSpans(Context ctx, int walkableHeight, int walkableClimb, Heightfield solid) {
         ctx.startTimer("FILTER_BORDER");
@@ -81,9 +89,9 @@ public class RecastFilter {
         int MAX_HEIGHT = 0xffff;
 
         // Mark border spans.
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                for (Span s = solid.spans[x + y * w]; s != null; s = s.next) {
+                for (Span s = solid.spans[x + z * w]; s != null; s = s.next) {
                     // Skip non walkable spans.
                     if (s.area == RecastConstants.RC_NULL_AREA)
                         continue;
@@ -92,23 +100,27 @@ public class RecastFilter {
                     int top = s.next != null ? s.next.smin : MAX_HEIGHT;
 
                     // Find neighbours minimum height.
+                    // 记录与邻居的最大高度差，邻居（ns）的smax减去当前（s）的smax
                     int minh = MAX_HEIGHT;
 
                     // Min and max height of accessible neighbours.
+                    // 记录四个邻居中最高的邻居（ns1）和最深的邻居（ns2）之间的高度差，ns1的smax减去ns2的smax
                     int asmin = s.smax;
                     int asmax = s.smax;
 
                     for (int dir = 0; dir < 4; ++dir) {
                         int dx = x + RecastCommon.GetDirOffsetX(dir);
-                        int dy = y + RecastCommon.GetDirOffsetY(dir);
+                        int dz = z + RecastCommon.GetDirOffsetY(dir);
                         // Skip neighbours which are out of bounds.
-                        if (dx < 0 || dy < 0 || dx >= w || dy >= h) {
+                        // 对于超出地图xz平面的位置，想象这个位置上有一个陷入地面walkableClimb深的span，且此span头顶没有其他span
+                        if (dx < 0 || dz < 0 || dx >= w || dz >= h) {
                             minh = Math.min(minh, -walkableClimb - bot);
                             continue;
                         }
 
                         // From minus infinity to the first span.
-                        Span ns = solid.spans[dx + dy * w];
+                        // 此处想象一块陷入底面walkableClimb深的span，此span头顶就是ns，这里比较的就是这个span和s
+                        Span ns = solid.spans[dx + dz * w];
                         int nbot = -walkableClimb;
                         int ntop = ns != null ? ns.smin : MAX_HEIGHT;
                         // Skip neightbour if the gap between the spans is too small.
@@ -116,7 +128,7 @@ public class RecastFilter {
                             minh = Math.min(minh, nbot - bot);
 
                         // Rest of the spans.
-                        for (ns = solid.spans[dx + dy * w]; ns != null; ns = ns.next) {
+                        for (ns = solid.spans[dx + dz * w]; ns != null; ns = ns.next) {
                             nbot = ns.smax;
                             ntop = ns.next != null ? ns.next.smin : MAX_HEIGHT;
                             // Skip neightbour if the gap between the spans is too small.
@@ -157,6 +169,8 @@ public class RecastFilter {
     /// For this filter, the clearance above the span is the distance from the span's
     /// maximum to the next higher span's minimum. (Same grid column.)
     ///
+    /// 像桌子，桌子面和桌子下面的地板都会被标为可行走区域，但是由于这两个span之间的空间太矮了，AI单位不能通过，所以桌子下面的地板应该被标为不可行走
+    ///
     /// @see rcHeightfield, rcConfig
     public static void filterWalkableLowHeightSpans(Context ctx, int walkableHeight, Heightfield solid) {
         ctx.startTimer("FILTER_WALKABLE");
@@ -167,9 +181,9 @@ public class RecastFilter {
 
         // Remove walkable flag from spans which do not have enough
         // space above them for the agent to stand there.
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                for (Span s = solid.spans[x + y * w]; s != null; s = s.next) {
+                for (Span s = solid.spans[x + z * w]; s != null; s = s.next) {
                     int bot = (s.smax);
                     int top = s.next != null ? s.next.smin : MAX_HEIGHT;
                     if ((top - bot) <= walkableHeight)
