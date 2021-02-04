@@ -706,9 +706,9 @@ public class RecastContour {
         ctx.startTimer("BUILD_CONTOURS_TRACE");
 
         // Mark boundaries.
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     int res = 0;
                     CompactSpan s = chf.spans[i];
@@ -720,8 +720,8 @@ public class RecastContour {
                         int r = 0;
                         if (RecastCommon.GetCon(s, dir) != RC_NOT_CONNECTED) {
                             int ax = x + RecastCommon.GetDirOffsetX(dir);
-                            int ay = y + RecastCommon.GetDirOffsetY(dir);
-                            int ai = chf.cells[ax + ay * w].index + RecastCommon.GetCon(s, dir);
+                            int az = z + RecastCommon.GetDirOffsetY(dir);
+                            int ai = chf.cells[ax + az * w].index + RecastCommon.GetCon(s, dir);
                             r = chf.spans[ai].reg;
                         }
                         if (r == chf.spans[i].reg)

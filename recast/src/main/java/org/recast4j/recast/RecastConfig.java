@@ -76,12 +76,14 @@ public class RecastConfig {
 
     /**
      * The minimum number of cells allowed to form isolated island areas. [Limit: >=0] [Units: vx]
+     * 一个region及其全部连通region的span总数小于该值时，就表明这个region及其连通region是一个很小的孤岛，要被省略掉
      **/
     public final int minRegionArea;
 
     /**
      * Any regions with a span count smaller than this value will, if possible, be merged with larger regions. [Limit:
      * >=0] [Units: vx]
+     * 如果一个region的span数目小于该值，它会被合并到邻居region中
      **/
     public final int mergeRegionArea;
 

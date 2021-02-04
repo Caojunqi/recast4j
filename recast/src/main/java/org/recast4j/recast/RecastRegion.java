@@ -40,6 +40,7 @@ public class RecastRegion {
     /**
      * 计算CompactHeightfield中各个Cell距离边界的距离
      * 计算逻辑与{@link RecastArea#erodeWalkableArea}一致
+     * 同一个cell中不同层的span算得的距离可能是一样的（两层的边界形状完全一致），也可能不一样（两层的边界形状不完全一致）。
      *
      * @param chf 空心高度场
      * @param src 用于存储距离计算结果，计算出的距离单位是“半个体素块”
@@ -258,6 +259,7 @@ public class RecastRegion {
         int area = chf.areas[i];
 
         // Flood fill mark region.
+        // PERF 这里的stack可以自己new一个本地变量，不用作为一个参数传进来
         stack.clear();
         stack.add(x);
         stack.add(z);
@@ -351,13 +353,13 @@ public class RecastRegion {
         if (fillStack) {
             // Find cells revealed by the raised level.
             stack.clear();
-            for (int y = 0; y < h; ++y) {
+            for (int z = 0; z < h; ++z) {
                 for (int x = 0; x < w; ++x) {
-                    CompactCell c = chf.cells[x + y * w];
+                    CompactCell c = chf.cells[x + z * w];
                     for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                         if (chf.dist[i] >= level && srcReg[i] == 0 && chf.areas[i] != RC_NULL_AREA) {
                             stack.add(x);
-                            stack.add(y);
+                            stack.add(z);
                             stack.add(i);
                         }
                     }
@@ -429,6 +431,7 @@ public class RecastRegion {
             }
 
             if (failed * 3 == stack.size()) {
+                // 表示没有能继续expand的span了
                 break;
             }
 
@@ -508,13 +511,18 @@ public class RecastRegion {
     static class Region {
         int spanCount; // Number of spans belonging to this region
         int id; // ID of the region
-        int areaType; // Are type.
+        int areaType; // Area type.
         boolean remap;
         boolean visited;
+        // 该region中的span是否发生过叠层，即，同一个cell中的不同层的span处于同一个region中
+        // 想象一个三层楼，第一层因为处于地面，周围都是可行走区域，不考虑了；
+        // 第2层和第3层楼周围都是不可走区域，它俩距离障碍边界的距离就是一样的，那么它俩就会被分到同一个region，
+        // 这个region就是overlap的，但是第1层所在的region就不一定是overlap的了
         boolean overlap;
         boolean connectsToBorder;
         int ymin, ymax;
         List<Integer> connections;
+        // 当前region和哪些region有重叠
         List<Integer> floors;
 
         Region(int i) {
@@ -525,8 +533,6 @@ public class RecastRegion {
         }
 
     }
-
-    ;
 
     private static void removeAdjacentNeighbours(Region reg) {
         // Remove adjacent duplicates.
@@ -569,10 +575,12 @@ public class RecastRegion {
             }
         }
         if (n > 1) {
+            // rega和regb有多个地方相连（2个或2个以上）
             return false;
         }
         for (int i = 0; i < rega.floors.size(); ++i) {
             if (rega.floors.get(i) == regb.id) {
+                // rega和regb有重叠
                 return false;
             }
         }
@@ -585,6 +593,9 @@ public class RecastRegion {
         }
     }
 
+    /**
+     * 把regb合并到rega中
+     */
     private static boolean mergeRegions(Region rega, Region regb) {
         int aid = rega.id;
         int bid = regb.id;
@@ -645,6 +656,11 @@ public class RecastRegion {
         return reg.connections.contains(0);
     }
 
+    /**
+     * 判断cell(x,y)中的span i在dir方向上是否是一个边界
+     * 1.dir方向上的邻居从span i上不可走到
+     * 2.dir方向上的邻居和span i不在同一个region里
+     */
     private static boolean isSolidEdge(CompactHeightfield chf, int[] srcReg, int x, int y, int i, int dir) {
         CompactSpan s = chf.spans[i];
         int r = 0;
@@ -671,10 +687,15 @@ public class RecastRegion {
             int ax = x + RecastCommon.GetDirOffsetX(dir);
             int ay = y + RecastCommon.GetDirOffsetY(dir);
             int ai = chf.cells[ax + ay * chf.width].index + RecastCommon.GetCon(ss, dir);
+            // 注意，此处可能出现一种情况是，srcReg[ai]==0，也就是说ss的dir方向的连接邻居的areaType是0
+            // 按理说，如果ss在dir方向上的邻居areaType==0，就表明这个邻居上没有CompactSpan，这样的话，ss在dir方向上就不可能有连接
+            // 出现这种情况的原因是，ss在dir方向上的邻居，本来areaType不是0，也就是说这个地方是有CompactSpan的，但是在后来的优化中，此CompactSpan的areaType被优化为0，才导致这种情况的
+            // RecastArea.erodeWalkableArea()就会导致这种情况出现
             curReg = srcReg[ai];
         }
         cont.add(curReg);
 
+        // 贴着region的边绕了一周
         int iter = 0;
         while (++iter < 40000) {
             CompactSpan s = chf.spans[i];
@@ -692,7 +713,7 @@ public class RecastRegion {
                     curReg = r;
                     cont.add(curReg);
                 }
-
+                // 顺时针旋转一个方向
                 dir = (dir + 1) & 0x3; // Rotate CW
             } else {
                 int ni = -1;
@@ -704,11 +725,15 @@ public class RecastRegion {
                 }
                 if (ni == -1) {
                     // Should not happen.
+                    // 跳入这一步表明RecastCommon.GetCon(s, dir)==RC_NOT_CONNECTED，
+                    // 如果RecastCommon.GetCon(s, dir)==RC_NOT_CONNECTED，isSolidEdge(chf, srcReg, x, y, i, dir)应该为true
+                    // 所以这一步不可能发生
                     return;
                 }
                 x = nx;
                 y = ny;
                 i = ni;
+                // 逆时针旋转一个方向
                 dir = (dir + 3) & 0x3; // Rotate CCW
             }
 
@@ -718,6 +743,10 @@ public class RecastRegion {
         }
 
         // Remove adjacent duplicates.
+        // 把cont列表首尾相连成一个环，如果有两个相邻的数一样，就删掉前一个
+        // 例如，old cont是[1,0,1]，new cont变为[1,0]
+        // old cont是[2,0,3,0,2,0]，new cont不变。
+        // 所以这一串逻辑不是简单地去重
         if (cont.size() > 1) {
             for (int j = 0; j < cont.size(); ) {
                 int nj = (j + 1) % cont.size();
@@ -744,9 +773,9 @@ public class RecastRegion {
         }
 
         // Find edge of a region and find connections around the contour.
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     int r = srcReg[i];
                     if (r == 0 || r >= nreg) {
@@ -781,7 +810,7 @@ public class RecastRegion {
                     // Check if this cell is next to a border.
                     int ndir = -1;
                     for (int dir = 0; dir < 4; ++dir) {
-                        if (isSolidEdge(chf, srcReg, x, y, i, dir)) {
+                        if (isSolidEdge(chf, srcReg, x, z, i, dir)) {
                             ndir = dir;
                             break;
                         }
@@ -790,7 +819,7 @@ public class RecastRegion {
                     if (ndir != -1) {
                         // The cell is at border.
                         // Walk around the contour to find all the neighbours.
-                        walkContour(x, y, i, ndir, chf, srcReg, reg.connections);
+                        walkContour(x, z, i, ndir, chf, srcReg, reg.connections);
                     }
                 }
             }
@@ -915,6 +944,7 @@ public class RecastRegion {
                             // If another region was already merged into current region
                             // change the nid of the previous region too.
                             if (regions[j].id == oldId) {
+                                // 通常情况下，这里的j==i，这里的regions[j]就是被合并到target中的那个reg
                                 regions[j].id = mergeId;
                             }
                             // Replace the current region with the new one if the
@@ -939,6 +969,10 @@ public class RecastRegion {
             regions[i].remap = true;
         }
 
+        // 在上面的逻辑中，regions中有些region被剔除，id变成了0，有些region被合并，id变成了别家region的id
+        // 这就导致整个regions中的id不再是从0到nreg顺序排列了
+        // 这一步循环的目的就是把regions中的id整理一遍，使其变成紧凑的id排列
+        // 举例：改之前 [0,1,2,0,2,8,6,8,8]；改之后 [0,1,2,0,2,3,4,3,3]
         int regIdGen = 0;
         for (int i = 0; i < nreg; ++i) {
             if (!regions[i].remap) {
@@ -1434,6 +1468,16 @@ public class RecastRegion {
 
         chf.borderSize = borderSize;
 
+        // 这一步while循环的逻辑由[1+(level-2)/(2*NB_STACKS)]个大轮回组成，每个大轮回由NB_STACKS个小轮回组成（也即sId从0到NB_STACKS-1），每个小轮回由3大部分组成。
+        // 这里简单讲解一下这三大部分的逻辑原理：
+        // 1. 在lvlStacks中存放进划分好的span信息，一共分NB_STACKS块，每个小轮回处理一块，分两种情况：
+        //     1.1. sId等于0，sortCellByLevel，大轮回刚开始，按照距离把本次大轮回需要处理的span分块，存入lvlStacks中；
+        //     1.2. sId不等于0，appendStacks，检查一下上一个小轮回中处理的span中是否有未分配到regionId的，把这些添加到当前小轮回要处理的span块中。
+        // 2. expandRegions，遍历当前span块，对于没有分配到regionId的span，如果其四方向邻居中有span已经分配好regionId，
+        // 从这些span中找出一个srcDist最小的，将其regionId用作当前span，将其srcDist+2用作当前span的srcDist。
+        // 3. floodRegion，遍历当前span块，对于没有分配到regionId的span，将其作为new region的种子，srcDist为0；
+        // 检测种子，如果种子的8方向邻居中有邻居span有其他的regionId，则表中当前种子不合格，种子的regionId还原为0；
+        // 种子合格后，将种子设为当前span，遍历当前span的4方向邻居，邻居的dist（由RecastRegion.buildDistanceField函数确定）大于等于当前span，或者比当前span少2，则邻居可以扩进当前region，使用当前regionId，并且srcDist为0.
         int sId = -1;
         while (level > 0) {
             level = level >= 2 ? level - 2 : 0;
@@ -1477,6 +1521,7 @@ public class RecastRegion {
         }
 
         // Expand current regions until no empty connected cells found.
+        // 遍历全图，找出未设置regionId的span，根据其四方向邻居中已经确定好的regionId，确定自己的regionId，算是一个整体的弥补措施
         expandRegions(expandIters * 8, 0, chf, srcReg, srcDist, stack, true);
 
         ctx.stopTimer("BUILD_REGIONS_WATERSHED");
