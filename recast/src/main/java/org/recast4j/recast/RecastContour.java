@@ -51,28 +51,52 @@ public class RecastContour {
         public int vert;
     }
 
-    private static int getCornerHeight(int x, int y, int i, int dir, CompactHeightfield chf, boolean isBorderVertex) {
+    /**
+     * FIX 此方法的参数isBorderVertex在C++版本中是通过引用的方式传入的，也就是说本方法体内对isBorderVertex的修改是会影响到方法体外部的，
+     * 但是在Java版本中，此参数变成了值传递，不再能影响方法体外部了，所以这是一个BUG
+     * 后续涉及到TileMesh的创建时，要修复此BUG
+     * <p>
+     * 示例图：
+     * A-----B-----C-----D
+     * |  S1 |  S2 |  S3 |
+     * E-----F-----G-----H
+     * |  S4 |  S5 |  S6 |
+     * I-----J-----K-----L
+     * |  S7 |  S8 |  S9 |
+     * M-----N-----O-----P
+     * <p>
+     * dir为0，角落四span为[S5,S4,S1,S2]；
+     * dir为1，角落四span为[S5,S2,S3,S6]；
+     * dir为2，角落四span为[S5,S6,S9,S8]；
+     * dir为3，角落四span为[S5,S8,S7,S4]；
+     *
+     * @return 返回角落中四个span的最大高度，
+     */
+    private static int getCornerHeight(int x, int z, int i, int dir, CompactHeightfield chf, boolean isBorderVertex) {
         CompactSpan s = chf.spans[i];
         int ch = s.y;
         int dirp = (dir + 1) & 0x3;
 
-        int regs[] = { 0, 0, 0, 0 };
+        // 如示例图所示，S5为当前span，dir为3，也就是向下方向，那么regs数组中的数据分布情况为：
+        // regs[0]为S5的数据；regs[1]为S8的数据；regs[2]为S7的数据；regs[3]位S4的数据。
+        int regs[] = {0, 0, 0, 0};
 
         // Combine region and area codes in order to prevent
         // border vertices which are in between two areas to be removed.
+        // regs数组中一个int分两半，前半部分（16个字节）存放area信息，后半部分（16个字节）存放regionId信息
         regs[0] = chf.spans[i].reg | (chf.areas[i] << 16);
 
         if (RecastCommon.GetCon(s, dir) != RC_NOT_CONNECTED) {
             int ax = x + RecastCommon.GetDirOffsetX(dir);
-            int ay = y + RecastCommon.GetDirOffsetY(dir);
-            int ai = chf.cells[ax + ay * chf.width].index + RecastCommon.GetCon(s, dir);
+            int az = z + RecastCommon.GetDirOffsetY(dir);
+            int ai = chf.cells[ax + az * chf.width].index + RecastCommon.GetCon(s, dir);
             CompactSpan as = chf.spans[ai];
             ch = Math.max(ch, as.y);
             regs[1] = chf.spans[ai].reg | (chf.areas[ai] << 16);
             if (RecastCommon.GetCon(as, dirp) != RC_NOT_CONNECTED) {
                 int ax2 = ax + RecastCommon.GetDirOffsetX(dirp);
-                int ay2 = ay + RecastCommon.GetDirOffsetY(dirp);
-                int ai2 = chf.cells[ax2 + ay2 * chf.width].index + RecastCommon.GetCon(as, dirp);
+                int az2 = az + RecastCommon.GetDirOffsetY(dirp);
+                int ai2 = chf.cells[ax2 + az2 * chf.width].index + RecastCommon.GetCon(as, dirp);
                 CompactSpan as2 = chf.spans[ai2];
                 ch = Math.max(ch, as2.y);
                 regs[2] = chf.spans[ai2].reg | (chf.areas[ai2] << 16);
@@ -80,15 +104,15 @@ public class RecastContour {
         }
         if (RecastCommon.GetCon(s, dirp) != RC_NOT_CONNECTED) {
             int ax = x + RecastCommon.GetDirOffsetX(dirp);
-            int ay = y + RecastCommon.GetDirOffsetY(dirp);
-            int ai = chf.cells[ax + ay * chf.width].index + RecastCommon.GetCon(s, dirp);
+            int az = z + RecastCommon.GetDirOffsetY(dirp);
+            int ai = chf.cells[ax + az * chf.width].index + RecastCommon.GetCon(s, dirp);
             CompactSpan as = chf.spans[ai];
             ch = Math.max(ch, as.y);
             regs[3] = chf.spans[ai].reg | (chf.areas[ai] << 16);
             if (RecastCommon.GetCon(as, dir) != RC_NOT_CONNECTED) {
                 int ax2 = ax + RecastCommon.GetDirOffsetX(dir);
-                int ay2 = ay + RecastCommon.GetDirOffsetY(dir);
-                int ai2 = chf.cells[ax2 + ay2 * chf.width].index + RecastCommon.GetCon(as, dir);
+                int az2 = az + RecastCommon.GetDirOffsetY(dir);
+                int ai2 = chf.cells[ax2 + az2 * chf.width].index + RecastCommon.GetCon(as, dir);
                 CompactSpan as2 = chf.spans[ai2];
                 ch = Math.max(ch, as2.y);
                 regs[2] = chf.spans[ai2].reg | (chf.areas[ai2] << 16);
@@ -104,9 +128,13 @@ public class RecastContour {
 
             // The vertex is a border vertex there are two same exterior cells in a row,
             // followed by two interior cells and none of the regions are out of bounds.
+            // 如果twoSameExts为true，表示regs[a]和regs[b]相等，并且均为边界区域（regionId==RC_BORDER_REG）
             boolean twoSameExts = (regs[a] & regs[b] & RC_BORDER_REG) != 0 && regs[a] == regs[b];
+            // 如果twoInts为true，表示regs[c]和regs[d]两个都不是边界区域（regionId!=RC_BORDER_REG）
             boolean twoInts = ((regs[c] | regs[d]) & RC_BORDER_REG) == 0;
+            // 如果intsSameArea为true，表示regs[c]和regs[d]两个的areaType一样
             boolean intsSameArea = (regs[c] >> 16) == (regs[d] >> 16);
+            // 如果noZeros为true，表示a b c d四个span均为可走区域，都不是NULL_AREA
             boolean noZeros = regs[a] != 0 && regs[b] != 0 && regs[c] != 0 && regs[d] != 0;
             if (twoSameExts && twoInts && intsSameArea && noZeros) {
                 isBorderVertex = true;
@@ -117,7 +145,31 @@ public class RecastContour {
         return ch;
     }
 
-    private static void walkContour(int x, int y, int i, CompactHeightfield chf, int[] flags, List<Integer> points) {
+    /**
+     * 把区域的边界标记出来
+     * <p>
+     * 示例图：
+     * A-----B-----C-----D
+     * |  S1 |  S2 |  S3 |
+     * E-----F-----G-----H
+     * |  S4 |  S5 |  S6 |
+     * I-----J-----K-----L
+     * |  S7 |  S8 |  S9 |
+     * M-----N-----O-----P
+     * <p>
+     *
+     * @param points 组成区域边界的点信息，每四个数字为一组，(x,y,z,r)，x y z 表示坐标，r表示region信息（包括regionId以及其他标识）
+     *               如上图所示，当前判断点(x,z)为S5，
+     *               1. dir为0，如果S4不可走，或者S4所在region和S5所在region不是同一个，那么就放入一个边界点信息(x,y,z,r)，
+     *               其中(x,z)是S2的坐标，y是[S5,S4,S1,S2]四点的最大高度，r里面的regionId是S4的regionId；
+     *               2. dir为1，如果S2不可走，或者S2所在region和S5所在region不是同一个，那么就放入一个边界点信息(x,y,z,r)，
+     *               其中(x,z)是S3的坐标，y是[S5,S2,S3,S6]四点的最大高度，r里面的regionId是S2的regionId；
+     *               3. dir为2，如果S6不可走，或者S6所在region和S5所在region不是同一个，那么就放入一个边界点信息(x,y,z,r)，
+     *               其中(x,z)是S6的坐标，y是[S5,S6,S9,S8]四点的最大高度，r里面的regionId是S6的regionId；
+     *               4. dir为3，如果S8不可走，或者S8所在region和S5所在region不是同一个，那么就放入一个边界点信息(x,y,z,r)，
+     *               其中(x,z)是S5的坐标，y是[S5,S8,S7,S4]四点的最大高度，r里面的regionId是S8的regionId；
+     */
+    private static void walkContour(int x, int z, int i, CompactHeightfield chf, int[] flags, List<Integer> points) {
         // Choose the first non-connected edge
         int dir = 0;
         while ((flags[i] & (1 << dir)) == 0)
@@ -135,26 +187,26 @@ public class RecastContour {
                 boolean isBorderVertex = false;
                 boolean isAreaBorder = false;
                 int px = x;
-                int py = getCornerHeight(x, y, i, dir, chf, isBorderVertex);
-                int pz = y;
+                int py = getCornerHeight(x, z, i, dir, chf, isBorderVertex);
+                int pz = z;
                 switch (dir) {
-                case 0:
-                    pz++;
-                    break;
-                case 1:
-                    px++;
-                    pz++;
-                    break;
-                case 2:
-                    px++;
-                    break;
+                    case 0:
+                        pz++;
+                        break;
+                    case 1:
+                        px++;
+                        pz++;
+                        break;
+                    case 2:
+                        px++;
+                        break;
                 }
                 int r = 0;
                 CompactSpan s = chf.spans[i];
                 if (RecastCommon.GetCon(s, dir) != RC_NOT_CONNECTED) {
                     int ax = x + RecastCommon.GetDirOffsetX(dir);
-                    int ay = y + RecastCommon.GetDirOffsetY(dir);
-                    int ai = chf.cells[ax + ay * chf.width].index + RecastCommon.GetCon(s, dir);
+                    int az = z + RecastCommon.GetDirOffsetY(dir);
+                    int ai = chf.cells[ax + az * chf.width].index + RecastCommon.GetCon(s, dir);
                     r = chf.spans[ai].reg;
                     if (area != chf.areas[ai])
                         isAreaBorder = true;
@@ -173,10 +225,10 @@ public class RecastContour {
             } else {
                 int ni = -1;
                 int nx = x + RecastCommon.GetDirOffsetX(dir);
-                int ny = y + RecastCommon.GetDirOffsetY(dir);
+                int nz = z + RecastCommon.GetDirOffsetY(dir);
                 CompactSpan s = chf.spans[i];
                 if (RecastCommon.GetCon(s, dir) != RC_NOT_CONNECTED) {
-                    CompactCell nc = chf.cells[nx + ny * chf.width];
+                    CompactCell nc = chf.cells[nx + nz * chf.width];
                     ni = nc.index + RecastCommon.GetCon(s, dir);
                 }
                 if (ni == -1) {
@@ -184,7 +236,7 @@ public class RecastContour {
                     return;
                 }
                 x = nx;
-                y = ny;
+                z = nz;
                 i = ni;
                 dir = (dir + 3) & 0x3; // Rotate CCW
             }
@@ -216,10 +268,11 @@ public class RecastContour {
     }
 
     private static void simplifyContour(List<Integer> points, List<Integer> simplified, float maxError, int maxEdgeLen,
-            int buildFlags) {
+                                        int buildFlags) {
         // Add initial points.
         boolean hasConnections = false;
         for (int i = 0; i < points.size(); i += 4) {
+            // points.get(i + 3) & RC_CONTOUR_REG_MASK 的计算结果表示region边界点i的所在区域的regionId
             if ((points.get(i + 3) & RC_CONTOUR_REG_MASK) != 0) {
                 hasConnections = true;
                 break;
@@ -230,9 +283,12 @@ public class RecastContour {
             // The contour has some portals to other regions.
             // Add a new point to every location where the region changes.
             for (int i = 0, ni = points.size() / 4; i < ni; ++i) {
+                // 把整个points中的点首尾相连成一个环，i和ii是相邻的两个点
                 int ii = (i + 1) % ni;
+                // differentRegs为true，表示相邻两个点的regionId不同
                 boolean differentRegs = (points.get(i * 4 + 3) & RC_CONTOUR_REG_MASK) != (points.get(ii * 4 + 3)
                         & RC_CONTOUR_REG_MASK);
+                // areaBorders为true，表示相邻两个点，一个点紧贴障碍边界，另一点不挨着障碍边界
                 boolean areaBorders = (points.get(i * 4 + 3) & RC_AREA_BORDER) != (points.get(ii * 4 + 3)
                         & RC_AREA_BORDER);
                 if (differentRegs || areaBorders) {
@@ -245,9 +301,12 @@ public class RecastContour {
         }
 
         if (simplified.size() == 0) {
+            // 该区域不与其他区域连接，边界上全是障碍物
             // If there is no connections at all,
             // create some initial points for the simplification process.
             // Find lower-left and upper-right vertices of the contour.
+            // lower-left点：x最小，x相等的情况下，选z更小的
+            // upper-right点：x最大，x相等的情况下，选z更大的
             int llx = points.get(0);
             int lly = points.get(1);
             int llz = points.get(2);
@@ -286,7 +345,7 @@ public class RecastContour {
         // Add points until all raw points are within
         // error tolerance to the simplified shape.
         int pn = points.size() / 4;
-        for (int i = 0; i < simplified.size() / 4;) {
+        for (int i = 0; i < simplified.size() / 4; ) {
             int ii = (i + 1) % (simplified.size() / 4);
 
             int ax = simplified.get(i * 4 + 0);
@@ -345,7 +404,7 @@ public class RecastContour {
         }
         // Split too long edges.
         if (maxEdgeLen > 0 && (buildFlags & (RC_CONTOUR_TESS_WALL_EDGES | RC_CONTOUR_TESS_AREA_EDGES)) != 0) {
-            for (int i = 0; i < simplified.size() / 4;) {
+            for (int i = 0; i < simplified.size() / 4; ) {
                 int ii = (i + 1) % (simplified.size() / 4);
 
                 int ax = simplified.get(i * 4 + 0);
@@ -422,7 +481,7 @@ public class RecastContour {
     }
 
     private static boolean intersectSegCountour(int d0, int d1, int i, int n, int[] verts, int[] d0verts,
-            int[] d1verts) {
+                                                int[] d1verts) {
         // For each edge (k,k+1) of P
         int[] pverts = new int[4 * 4];
         for (int g = 0; g < 4; g++) {
@@ -547,7 +606,7 @@ public class RecastContour {
                 leftmost = i;
             }
         }
-        return new int[] { minx, minz, leftmost };
+        return new int[]{minx, minz, leftmost};
     }
 
     private static class CompareHoles implements Comparator<ContourHole> {
@@ -676,7 +735,7 @@ public class RecastContour {
     ///
     /// @see rcAllocContourSet, rcCompactHeightfield, rcContourSet, rcConfig
     public static ContourSet buildContours(Context ctx, CompactHeightfield chf, float maxError, int maxEdgeLen,
-            int buildFlags) {
+                                           int buildFlags) {
 
         int w = chf.width;
         int h = chf.height;
@@ -737,9 +796,9 @@ public class RecastContour {
         List<Integer> verts = new ArrayList<>(256);
         List<Integer> simplified = new ArrayList<>(64);
 
-        for (int y = 0; y < h; ++y) {
+        for (int z = 0; z < h; ++z) {
             for (int x = 0; x < w; ++x) {
-                CompactCell c = chf.cells[x + y * w];
+                CompactCell c = chf.cells[x + z * w];
                 for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                     if (flags[i] == 0 || flags[i] == 0xf) {
                         flags[i] = 0;
@@ -754,7 +813,7 @@ public class RecastContour {
                     simplified.clear();
 
                     ctx.startTimer("BUILD_CONTOURS_TRACE");
-                    walkContour(x, y, i, chf, flags, verts);
+                    walkContour(x, z, i, chf, flags, verts);
                     ctx.stopTimer("BUILD_CONTOURS_TRACE");
 
                     ctx.startTimer("BUILD_CONTOURS_SIMPLIFY");
