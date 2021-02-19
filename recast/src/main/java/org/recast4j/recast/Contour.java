@@ -18,20 +18,36 @@ freely, subject to the following restrictions:
 */
 package org.recast4j.recast;
 
-/** Represents a simple, non-overlapping contour in field space. */
+/**
+ * Represents a simple, non-overlapping contour in field space.
+ */
 public class Contour {
 
-    /** Simplified contour vertex and connection data. [Size: 4 * #nverts] */
+    /**
+     * Simplified contour vertex and connection data. [Size: 4 * #nverts]
+     * 简化后的边界点信息
+     */
     public int[] verts;
-    /** The number of vertices in the simplified contour. */
+    /**
+     * The number of vertices in the simplified contour.
+     */
     public int nverts;
-    /** Raw contour vertex and connection data. [Size: 4 * #nrverts] */
+    /**
+     * Raw contour vertex and connection data. [Size: 4 * #nrverts]
+     * 简化前的完整边界点信息
+     */
     public int[] rverts;
-    /** The number of vertices in the raw contour. */
+    /**
+     * The number of vertices in the raw contour.
+     */
     public int nrverts;
-    /** The region id of the contour. */
+    /**
+     * The region id of the contour.
+     */
     public int area;
-    /** The area id of the contour. */
+    /**
+     * The area id of the contour.
+     */
     public int reg;
 
 }

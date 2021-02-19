@@ -247,6 +247,12 @@ public class RecastContour {
         }
     }
 
+    /**
+     * 本算法是用来计算点(x,z)到指定线段之间的最短距离
+     * 点(px,pz)和点(qx,qz)能够确定一条线段L，过点(x,z)做线段L的垂线，交点为(x1,z1)
+     * 则(x,z)和(x1,z1)之间的距离即为所求。
+     * 参考资料：http://paulbourke.net/geometry/pointlineplane/
+     */
     private static float distancePtSeg(int x, int z, int px, int pz, int qx, int qz) {
         float pqx = qx - px;
         float pqz = qz - pz;
@@ -267,6 +273,15 @@ public class RecastContour {
         return dx * dx + dz * dz;
     }
 
+    /**
+     * 简化多边形
+     *
+     * @param points     简化前的地图边界点
+     * @param simplified 简化后的地图边界点
+     * @param maxError
+     * @param maxEdgeLen
+     * @param buildFlags
+     */
     private static void simplifyContour(List<Integer> points, List<Integer> simplified, float maxError, int maxEdgeLen,
                                         int buildFlags) {
         // Add initial points.
@@ -364,6 +379,8 @@ public class RecastContour {
             // Traverse the segment in lexilogical order so that the
             // max deviation is calculated similarly when traversing
             // opposite segments.
+            // 下面这个if else 的作用：simplified中的点把points的点分成了一段一段的，把simplified中的点首尾相连，两个一组可以确定一段边界点。
+            // 这一段边界点的起始点要处于左下方lower-left，终点要处于右上方upper-right
             if (bx > ax || (bx == ax && bz > az)) {
                 cinc = 1;
                 ci = (ai + cinc) % pn;
@@ -470,11 +487,19 @@ public class RecastContour {
 
     }
 
+    /**
+     * 该算法用于计算一个多边形的面积
+     * 参考资料：https://en.wikipedia.org/wiki/Shoelace_formula
+     * @param verts 多边形的顶点信息，这里多边形点排列的顺序基本上是围绕多边形进行顺时针遍历的
+     * @param nverts 多边形的顶点数量
+     * @return 多边形的面积
+     */
     private static int calcAreaOfPolygon2D(int[] verts, int nverts) {
         int area = 0;
         for (int i = 0, j = nverts - 1; i < nverts; j = i++) {
             int vi = i * 4;
             int vj = j * 4;
+            // 此处是行列式计算
             area += verts[vi + 0] * verts[vj + 2] - verts[vj + 0] * verts[vi + 2];
         }
         return (area + 1) / 2;
@@ -536,6 +561,11 @@ public class RecastContour {
         return !(RecastMesh.leftOn(pverts, pi, pj, pi1) && RecastMesh.leftOn(pverts, pj, pi, pin1));
     }
 
+    /**
+     * 把simplified中(x,z)坐标完全相等的点移除掉
+     *
+     * @param simplified
+     */
     private static void removeDegenerateSegments(List<Integer> simplified) {
         // Remove adjacent vertices which are equal on xz-plane,
         // or else the triangulator will get confused.
