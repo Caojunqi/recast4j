@@ -3,3 +3,9 @@
 .idea
 .project
 .classpath
+/*/target/
+/*/logs
+/.idea/
+*.iml
+*.class
+*.log

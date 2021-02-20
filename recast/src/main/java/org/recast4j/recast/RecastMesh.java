@@ -40,6 +40,9 @@ public class RecastMesh {
         // http://www.terathon.com/code/edges.php
 
         int maxEdgeCount = npolys * vertsPerPoly;
+        // firstEdge里面的数据可以分为两大部分，前nverts个数值表示第i个顶点对应的是哪个边，后maxEdgeCount是一个边的链
+        // 例如，有一个顶点2，对应两条边，一条是[2-->3]（假设编号为7），一条是[2-->9]（假设编号为5），边[2-->9]先加入，[2-->3]后加入，
+        // 那么查找顶点2对应的边，firstEdge[2]就能索引到边[2-->3]，即firstEdge[2]==7，然后firstEdge[nverts+7]==5，意味着在7号边加入之前，顶点2对应的是5号边。
         int[] firstEdge = new int[nverts + maxEdgeCount];
         int nextEdge = nverts;
         int edgeCount = 0;
@@ -96,11 +99,15 @@ public class RecastMesh {
         }
 
         // Store adjacency
+        // 本函数的用意并不是说要统计所有多边形的所有边，而只是统计多边形之间的公共边。
         for (int i = 0; i < edgeCount; ++i) {
             Edge e = edges[i];
             if (e.poly[0] != e.poly[1]) {
                 int p0 = e.poly[0] * vertsPerPoly * 2;
                 int p1 = e.poly[1] * vertsPerPoly * 2;
+                // polys数组中，每vertsPerPoly*2个数值为一组，
+                // 每组数据中，前vertsPerPoly个数值表示多边形顶点信息；
+                // 后vertsPerPoly个数值中只有拥有公共边的顶点有数据，表示该顶点对应的边是和哪个多边形共边的。
                 polys[p0 + vertsPerPoly + e.polyEdge[0]] = e.poly[1];
                 polys[p1 + vertsPerPoly + e.polyEdge[1]] = e.poly[0];
             }
@@ -116,6 +123,18 @@ public class RecastMesh {
         return n & (VERTEX_BUCKET_COUNT - 1);
     }
 
+    /**
+     * 该函数的作用是往PolyMesh中添加多边形的顶点信息，如果发现同一坐标(x,z)上有两个顶点的高度差距特别小（函数中是差值在2以内），就可以忽略一个
+     * 函数中有两个参数firstVert和nextVert，这两个数组的作用是用来找出在(x,z)位置上是否已经有添加好的节点了。
+     * computeVertexHash()函数可以根据(x,z)坐标计算一个哈希值，然后可以根据这个哈希值在firstVert中找到相同哈希值对应的顶点索引。
+     * 而在nextVert数组中，可以找到所有相同哈希值的顶点。
+     * 举例，假如顶点索引为6 17 28 33这四个顶点的(x,z)哈希值相等，而且是从小到大顺序加入进来的，
+     * 那么通过computeVertexHash()函数计算出来的哈希值可以从firstVert数组中找到33号顶点，
+     * 然后nextVert[33] --> 28, nextVert[28] --> 17, nextVert[17] --> 6, nextVert[6] --> -1。
+     *
+     * @param nv 在添加新的顶点前，PolyMesh中现有多少个顶点。
+     * @return 返回值是一个数组，包含两个数值。第一个数值表示：顶点(x,y,z)在PolyMesh中所对应的的顶点下标索引；第二个数值表示：在指定完顶点添加操作后，PolyMesh中现在有多少个顶点。
+     */
     private static int[] addVertex(int x, int y, int z, int[] verts, int[] firstVert, int[] nextVert, int nv) {
         int bucket = computeVertexHash(x, 0, z);
         int i = firstVert[bucket];
@@ -123,7 +142,7 @@ public class RecastMesh {
         while (i != -1) {
             int v = i * 3;
             if (verts[v + 0] == x && (Math.abs(verts[v + 1] - y) <= 2) && verts[v + 2] == z)
-                return new int[] { i, nv };
+                return new int[]{i, nv};
             i = nextVert[i]; // next
         }
 
@@ -137,7 +156,7 @@ public class RecastMesh {
         nextVert[i] = firstVert[bucket];
         firstVert[bucket] = i;
 
-        return new int[] { i, nv };
+        return new int[]{i, nv};
     }
 
     static int prev(int i, int n) {
@@ -148,6 +167,13 @@ public class RecastMesh {
         return i + 1 < n ? i + 1 : 0;
     }
 
+    /**
+     * 计算a b c 三点组成的三角形面积
+     * 如果在xz坐标平面上，a b c是逆时针排列的，计算结果应为正；若是顺时针排列的，计算结果应为负。
+     * 此处的坐标系原点在左下角
+     *
+     * @return a b c 三点所组成的三角形面积的2倍
+     */
     private static int area2(int[] verts, int a, int b, int c) {
         return (verts[b + 0] - verts[a + 0]) * (verts[c + 2] - verts[a + 2])
                 - (verts[c + 0] - verts[a + 0]) * (verts[b + 2] - verts[a + 2]);
@@ -156,6 +182,8 @@ public class RecastMesh {
     // Returns true iff c is strictly to the left of the directed
     // line through a to b.
     static boolean left(int[] verts, int a, int b, int c) {
+        // 注：如果按照标准的笛卡尔坐标系（原点位于左下角）计算，当area2(verts, a, b, c)<0时，a b c三点是顺时针旋转的，也即c在a->b向量的右侧。
+        // 此处的计算结果是left，是因为在计算机图形学中，坐标系的原点在左上角
         return area2(verts, a, b, c) < 0;
     }
 
@@ -181,6 +209,7 @@ public class RecastMesh {
 
     // Returns T iff (a,b,c) are collinear and point c lies
     // on the closed segement ab.
+    // 判断点c是否在线段ab上
     private static boolean between(int[] verts, int a, int b, int c) {
         if (!collinear(verts, a, b, c))
             return false;
@@ -234,7 +263,10 @@ public class RecastMesh {
 
     // Returns true iff the diagonal (i,j) is strictly internal to the
     // polygon P in the neighborhood of the i endpoint.
+    // (i-1, i, i+1)这三个顶点可以组成一个角，这个角有可能小于180度，也有可能大于180度，
+    // 我们假设(i-1, i, i+1)三个顶点构成了多边形P的一个角，那么如果j处于这个多边形P内部，该函数返回true，否则返回false；
     private static boolean inCone(int i, int j, int n, int[] verts, int[] indices) {
+        // 注意：此处不能简单地改成 pi=i*4，人家这个写法没错，indices[i]中缓存了一个下标索引
         int pi = (indices[i] & 0x0fffffff) * 4;
         int pj = (indices[j] & 0x0fffffff) * 4;
         int pi1 = (indices[next(i, n)] & 0x0fffffff) * 4;
@@ -248,8 +280,9 @@ public class RecastMesh {
         return !(leftOn(verts, pi, pj, pi1) && leftOn(verts, pj, pi, pin1));
     }
 
-    // Returns T iff (v_i, v_j) is a proper internal
+    // Returns True iff (v_i, v_j) is a proper internal
     // diagonal of P.
+    // 若线段(i,j)处于多边形P的内部，且线段(i,j)不与多边形的其他边（由两个相邻顶点组成的边，同时这两个顶点还不能是i和j）相交，就返回true
     private static boolean diagonal(int i, int j, int n, int[] verts, int[] indices) {
         return inCone(i, j, n, verts, indices) && diagonalie(i, j, n, verts, indices);
     }
@@ -294,6 +327,15 @@ public class RecastMesh {
         return inConeLoose(i, j, n, verts, indices) && diagonalieLoose(i, j, n, verts, indices);
     }
 
+    /**
+     * 对多边形进行三角化
+     *
+     * @param n       多边形顶点个数
+     * @param verts   多边形顶点信息
+     * @param indices 一个缓存数据的数组，在三角化的过程中会不断裁剪掉顶点，这个数组中会存储当前索引下的顶点对应verts中的哪个顶点以及当前索引下的顶点是否可以被裁剪
+     * @param tris    裁剪后的三角形数据集合
+     * @return 多边形可以裁剪的三角形数量
+     */
     private static int triangulate(int n, int[] verts, int[] indices, int[] tris) {
         int ntris = 0;
 
@@ -316,8 +358,8 @@ public class RecastMesh {
                     int p2 = (indices[next(i1, n)] & 0x0fffffff) * 4;
 
                     int dx = verts[p2 + 0] - verts[p0 + 0];
-                    int dy = verts[p2 + 2] - verts[p0 + 2];
-                    int len = dx * dx + dy * dy;
+                    int dz = verts[p2 + 2] - verts[p0 + 2];
+                    int len = dx * dx + dz * dz;
 
                     if (minLen < 0 || len < minLen) {
                         minLen = len;
@@ -370,6 +412,8 @@ public class RecastMesh {
             ntris++;
 
             // Removes P[i1] by copying P[i+1]...P[n-1] left one index.
+            // 这里注释写错了，应该是移除P[i1]，复制P[i1+1]...P[n-1]左移一位
+            // 注意，这里只把indices中的数据向左移动了一位，verts中保持不变，删除i1顶点后，新的i1所代表的含义其实已经变成了以前的i2
             n--;
             for (int k = i1; k < n; k++)
                 indices[k] = indices[k + 1];
@@ -398,6 +442,13 @@ public class RecastMesh {
         return ntris;
     }
 
+    /**
+     * 计算多边形的顶点个数
+     * @param p 全部多边形的顶点索引数据
+     * @param j 表示要计算顶点个数的多边形，是第(j/nvp)个多边形，j表示该多边形的起始顶点在p数组中的下标。
+     * @param nvp p数组中每nvp个数值为一组，表示一个多边形。
+     * @return 多边形的顶点个数
+     */
     private static int countPolyVerts(int[] p, int j, int nvp) {
         for (int i = 0; i < nvp; ++i)
             if (p[i + j] == RC_MESH_NULL_IDX)
@@ -410,18 +461,29 @@ public class RecastMesh {
                 - (verts[c + 0] - verts[a + 0]) * (verts[b + 2] - verts[a + 2]) < 0;
     }
 
+    /**
+     * 判断两个多边形是否可以合并
+     * @param polys 全部多边形的顶点索引数据
+     * @param pa 待合并的多边形a
+     * @param pb 待合并的多边形b
+     * @param verts 全部顶点信息
+     * @param nvp 合并后的多边形所允许的最大顶点数量
+     * @return 多边形a b的合并信息，由三个数值组成，第一个数值表示公共边的长度；第二个数值和第三个数值表示公共边的顶点信息
+     */
     private static int[] getPolyMergeValue(int[] polys, int pa, int pb, int[] verts, int nvp) {
         int ea = -1;
         int eb = -1;
+        // 多边形pa的顶点个数
         int na = countPolyVerts(polys, pa, nvp);
+        // 多边形pb的顶点个数
         int nb = countPolyVerts(polys, pb, nvp);
 
         // If the merged polygon would be too big, do not merge.
+        // na+nb-2的计算结果是多边形pa和pb合并后的多边形的顶点个数。
         if (na + nb - 2 > nvp)
-            return new int[] { -1, ea, eb };
+            return new int[]{-1, ea, eb};
 
         // Check if the polygons share an edge.
-
         for (int i = 0; i < na; ++i) {
             int va0 = polys[pa + i];
             int va1 = polys[pa + (i + 1) % na];
@@ -448,22 +510,24 @@ public class RecastMesh {
 
         // No common edge, cannot merge.
         if (ea == -1 || eb == -1)
-            return new int[] { -1, ea, eb };
+            return new int[]{-1, ea, eb};
 
         // Check to see if the merged polygon would be convex.
+        // va vb vc这三个点其实就是公共边的顶点及其两边的顶点
+        // 凸多边形的判断逻辑，参考资料：http://www.critterai.org/projects/nmgen_study/polygen.html
         int va, vb, vc;
 
         va = polys[pa + (ea + na - 1) % na];
         vb = polys[pa + ea];
         vc = polys[pb + (eb + 2) % nb];
         if (!uleft(verts, va * 3, vb * 3, vc * 3))
-            return new int[] { -1, ea, eb };
+            return new int[]{-1, ea, eb};
 
         va = polys[pb + (eb + nb - 1) % nb];
         vb = polys[pb + eb];
         vc = polys[pa + (ea + 2) % na];
         if (!uleft(verts, va * 3, vb * 3, vc * 3))
-            return new int[] { -1, ea, eb };
+            return new int[]{-1, ea, eb};
 
         va = polys[pa + ea];
         vb = polys[pa + (ea + 1) % na];
@@ -471,13 +535,14 @@ public class RecastMesh {
         int dx = verts[va * 3 + 0] - verts[vb * 3 + 0];
         int dy = verts[va * 3 + 2] - verts[vb * 3 + 2];
 
-        return new int[] { dx * dx + dy * dy, ea, eb };
+        return new int[]{dx * dx + dy * dy, ea, eb};
     }
 
     private static void mergePolyVerts(int[] polys, int pa, int pb, int ea, int eb, int tmp, int nvp) {
         int na = countPolyVerts(polys, pa, nvp);
         int nb = countPolyVerts(polys, pb, nvp);
 
+        // 这个tmp的作用就是在polys数组的有效数据末尾开辟出nvp长度的空间，用来临时存放pa和pb合并后的顶点信息
         // Merge polygons.
         Arrays.fill(polys, tmp, tmp + nvp, RC_MESH_NULL_IDX);
         int n = 0;
@@ -776,7 +841,7 @@ public class RecastMesh {
 
         // Merge polygons.
         if (nvp > 3) {
-            for (;;) {
+            for (; ; ) {
                 // Find best polygons to merge.
                 int bestMergeVal = 0;
                 int bestPa = 0, bestPb = 0, bestEa = 0, bestEb = 0;
@@ -855,6 +920,7 @@ public class RecastMesh {
         mesh.maxEdgeError = cset.maxError;
 
         int maxVertices = 0;
+        // 最多能构成的三角形数量，举例：3个顶点最多构成1个三角形，4个顶点最多构成2个三角形，5个顶点最多构成3个三角形，前提是三角形之间不相互重叠。
         int maxTris = 0;
         int maxVertsPerCont = 0;
         for (int i = 0; i < cset.conts.size(); ++i) {
@@ -871,6 +937,7 @@ public class RecastMesh {
         int[] vflags = new int[maxVertices];
 
         mesh.verts = new int[maxVertices * 3];
+        // 这里每个多边形的信息由nvp*2个数值组成，其中前nvp个数值表示的是多边形的顶点信息，后nvp个数值表示的是多边形的边信息。
         mesh.polys = new int[maxTris * nvp * 2];
         Arrays.fill(mesh.polys, RC_MESH_NULL_IDX);
         mesh.regs = new int[maxTris];
@@ -889,6 +956,7 @@ public class RecastMesh {
 
         int[] indices = new int[maxVertsPerCont];
         int[] tris = new int[maxVertsPerCont * 3];
+        // polys数组中存放着多边形的顶点索引，每nvp个数值为一组，表示一个多边形，具体顶点坐标信息在mesh.verts中。
         int[] polys = new int[(maxVertsPerCont + 1) * nvp];
 
         int tmpPoly = maxVertsPerCont * nvp;
@@ -939,10 +1007,19 @@ public class RecastMesh {
                 continue;
 
             // Merge polygons.
+            // 从初始裁剪的多边形中，找出两个多边形进行合并
+            // 两个多边形可以合并的条件：
+            // 1.这两个多边形共用一个边；
+            // 2.合并结束后，形成的多边形是凸多边形；
+            // 3.合并结束后，形成的多边形顶点个数不超过nvp
+            // 4.在所有可合并的多边形中，这两个多边形的公共边最长。
             if (nvp > 3) {
-                for (;;) {
+                for (; ; ) {
                     // Find best polygons to merge.
                     int bestMergeVal = 0;
+                    // bestPa：最适合合并的多边形a
+                    // bestPb：最适合合并的多边形b
+                    // bestEa bestEb：多边形a b的公共边顶点
                     int bestPa = 0, bestPb = 0, bestEa = 0, bestEb = 0;
 
                     for (int j = 0; j < npolys - 1; ++j) {
@@ -970,6 +1047,7 @@ public class RecastMesh {
                         mergePolyVerts(polys, pa, pb, bestEa, bestEb, tmpPoly, nvp);
                         int lastPoly = (npolys - 1) * nvp;
                         if (pb != lastPoly) {
+                            // 多边形数据中间有个多边形被合并了，把最后一个多边形数据复制并填充到被合并的pb位置上，保证polys中(npolys-1)*nvp的数据都是干净有用的
                             System.arraycopy(polys, lastPoly, polys, pb, nvp);
                         }
                         npolys--;
@@ -1143,22 +1221,22 @@ public class RecastMesh {
                         if ((pmesh.polys[src + k] & 0x8000) != 0 && pmesh.polys[src + k] != 0xffff) {
                             int dir = pmesh.polys[src + k] & 0xf;
                             switch (dir) {
-                            case 0: // Portal x-
-                                if (isMinX)
-                                    mesh.polys[tgt + k] = pmesh.polys[src + k];
-                                break;
-                            case 1: // Portal z+
-                                if (isMaxZ)
-                                    mesh.polys[tgt + k] = pmesh.polys[src + k];
-                                break;
-                            case 2: // Portal x+
-                                if (isMaxX)
-                                    mesh.polys[tgt + k] = pmesh.polys[src + k];
-                                break;
-                            case 3: // Portal z-
-                                if (isMinZ)
-                                    mesh.polys[tgt + k] = pmesh.polys[src + k];
-                                break;
+                                case 0: // Portal x-
+                                    if (isMinX)
+                                        mesh.polys[tgt + k] = pmesh.polys[src + k];
+                                    break;
+                                case 1: // Portal z+
+                                    if (isMaxZ)
+                                        mesh.polys[tgt + k] = pmesh.polys[src + k];
+                                    break;
+                                case 2: // Portal x+
+                                    if (isMaxX)
+                                        mesh.polys[tgt + k] = pmesh.polys[src + k];
+                                    break;
+                                case 3: // Portal z-
+                                    if (isMinZ)
+                                        mesh.polys[tgt + k] = pmesh.polys[src + k];
+                                    break;
                             }
                         }
                     }
