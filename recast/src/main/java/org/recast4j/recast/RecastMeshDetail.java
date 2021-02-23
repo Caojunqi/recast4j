@@ -83,6 +83,12 @@ public class RecastMeshDetail {
         return (float) Math.sqrt(vdistSq2(p, verts, q));
     }
 
+    /**
+     * @return p1 p2 p3三个顶点组成的三角形面积的两倍，也即向量p1->p2和向量p1->p3组成的平行四边形的面积
+     * 返回值大于0，表示p1 p2 p3三点以逆时针方向排列；
+     * 返回值小于0，表示p1 p2 p3三点以顺时针方向排列；
+     * 返回0，表示p1 p2 p3三点共线或共点。
+     */
     private static float vcross2(float[] verts, int p1, int p2, int p3) {
         float u1 = verts[p2 + 0] - verts[p1 + 0];
         float v1 = verts[p2 + 2] - verts[p1 + 2];
@@ -113,10 +119,13 @@ public class RecastMeshDetail {
             float v1Sq = vdot2(v1, v1);
             float v2Sq = vdot2(v2, v2);
             float v3Sq = vdot2(v3, v3);
+            // 数组c是三角形p1 p2 p3的外接圆的圆心坐标，此坐标是一个相对坐标，是把p1看成(0,0)求出的
             c[0] = (v1Sq * (v2[2] - v3[2]) + v2Sq * (v3[2] - v1[2]) + v3Sq * (v1[2] - v2[2])) / (2 * cp);
             c[1] = 0;
             c[2] = (v1Sq * (v3[0] - v2[0]) + v2Sq * (v1[0] - v3[0]) + v3Sq * (v2[0] - v1[0])) / (2 * cp);
+            // r是三角形p1 p2 p3的外接圆的半径
             r.set(vdist2(c, v1));
+            // 经此步转换后，c变为一个世界坐标
             RecastVectors.add(c, c, verts, p1);
             return true;
         }
@@ -370,9 +379,11 @@ public class RecastMeshDetail {
     private static boolean overlapSegSeg2d(float[] verts, int a, int b, int c, int d) {
         float a1 = vcross2(verts, a, b, d);
         float a2 = vcross2(verts, a, b, c);
+        // a1*a2<0表示c d两点分布在线段ab的两边
         if (a1 * a2 < 0.0f) {
             float a3 = vcross2(verts, c, d, a);
             float a4 = a3 + a2 - a1;
+            // a3*a4<0表示a b两点分布在线段cd的两边
             if (a3 * a4 < 0.0f) {
                 return true;
             }
