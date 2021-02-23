@@ -125,6 +125,19 @@ public class RecastMeshDetail {
         return false;
     }
 
+    /**
+     * 近似计算点p与三角形a b c平面之间的高度差
+     * 注：说是“近似”，其实也是很精确的，有算法理论支撑
+     * 关于barycentric coordinates的理论和计算，
+     * 参考资料：https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-rendering-a-triangle/barycentric-coordinates
+     *
+     * @param p     待检测点
+     * @param verts
+     * @param a     三角形顶点一
+     * @param b     三角形顶点二
+     * @param c     三角形顶点三
+     * @return 返回Float.MAX_VALUE表示点p不在三角形内部
+     */
     private static float distPtTri(float[] p, float[] verts, int a, int b, int c) {
         float[] v0 = new float[3];
         float[] v1 = new float[3];
@@ -144,9 +157,15 @@ public class RecastMeshDetail {
         float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
         float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
 
+        // 也可以使用下面这种算法，u和v是点p分隔后的小三角形面积和总三角形面积的比例
+        // invDenom = 1.0f/Math.abs(v0[0]*v1[2]-v1[0]*v0[2]);
+        // u = Math.abs(v1[0]*v2[2]-v2[0]*v1[2])*invDenom;
+        // v = Math.abs(v0[0]*v2[2]-v2[0]*v0[2])*invDenom;
+
         // If point lies inside the triangle, return interpolated y-coord.
         float EPS = 1e-4f;
         if (u >= -EPS && v >= -EPS && (u + v) <= 1 + EPS) {
+            // 这里其实就是，如果u>=0，v>=0，u+v<=1，则表明点p在三角形内部
             float y = verts[a + 1] + v0[1] * u + v1[1] * v;
             return Math.abs(y - p[1]);
         }
@@ -217,10 +236,19 @@ public class RecastMeshDetail {
         return dmin;
     }
 
+    /**
+     * 计算点到多边形各边的最短距离
+     *
+     * @param nvert
+     * @param verts
+     * @param p
+     * @return 返回正值，表示点在多边形外部；返回负值，表示点在多边形内部。
+     */
     private static float distToPoly(int nvert, float[] verts, float[] p) {
 
         float dmin = Float.MAX_VALUE;
         int i, j;
+        // 布尔值c是判断点p是否在多边形verts内部
         boolean c = false;
         for (i = 0, j = nvert - 1; i < nvert; j = i++) {
             int vi = i * 3;
@@ -235,7 +263,7 @@ public class RecastMeshDetail {
     }
 
     private static int getHeight(float fx, float fy, float fz, float cs, float ics, float ch, int radius,
-            HeightPatch hp) {
+                                 HeightPatch hp) {
         int ix = (int) Math.floor(fx * ics + 0.01f);
         int iz = (int) Math.floor(fz * ics + 0.01f);
         ix = RecastCommon.clamp(ix - hp.xmin, 0, hp.width - 1);
@@ -542,6 +570,14 @@ public class RecastMeshDetail {
         return (float) Math.sqrt(minDist);
     }
 
+    /**
+     * 一种三角化的算法，步骤如下：
+     * 1.首先从所有的顶点中选出一个周长最小的三角形，例如，选一个顶点i，i的下一个顶点记为left，i的上一个顶点记为right，周长就是right i left这三个顶点组成的三角形的周长。
+     * 这里还有一个注意事项，就是顶点i必须要选择多边形原始顶点，也就是要选择这个多边形投射到xz平面后的顶点，由于高度差的原因，可能会在多边形的边上加一些顶点，i不能选这些顶点。
+     * 2.以周长最小的顶点i为种子，left和right不断向外扩张，每次left和right都尝试扩张一步，
+     * left向下获得nLeft，right向上获得pRight，然后看一下nLeft left right组成的三角形和left right pRight组成的三角形哪个周长更小，选择更小的那个进行扩张。
+     * 3.循环第2步，直到所有的顶点都扩张完毕。
+     */
     private static void triangulateHull(int nverts, float[] verts, int nhull, int[] hull, int nin, List<Integer> tris) {
         int start = 0, left = 1, right = nhull - 1;
 
@@ -614,12 +650,15 @@ public class RecastMeshDetail {
     }
 
     static int buildPolyDetail(Context ctx, float[] in, int nin, float sampleDist, float sampleMaxError,
-            int heightSearchRadius, CompactHeightfield chf, HeightPatch hp, float[] verts, List<Integer> tris) {
+                               int heightSearchRadius, CompactHeightfield chf, HeightPatch hp, float[] verts, List<Integer> tris) {
 
         List<Integer> samples = new ArrayList<>(512);
 
         int nverts = 0;
         float[] edge = new float[(MAX_VERTS_PER_EDGE + 1) * 3];
+        // hull数组是和verts数组搭配使用的，在hull数据填充完毕后，verts数据也填充完毕，
+        // 此时，verts数组可以分成hull.length块，每一块都存储着一个(x,y,z)坐标信息，也即每一块都存储着一个顶点信息，
+        // 而hull数组中就按顺序存储着顶点索引，使用时，从hull数组中按顺序依次拿出索引，然后用该索引去verts数组中获取具体的顶点坐标数据。
         int[] hull = new int[MAX_VERTS];
         int nhull = 0;
 
@@ -646,6 +685,9 @@ public class RecastMeshDetail {
                 boolean swapped = false;
                 // Make sure the segments are always handled in same order
                 // using lexological sort or else there will be seams.
+                // 1e-6(也就是0.000001)叫做epslon，用来抵消浮点运算中因为误差造成的相等无法判断的情况.
+                // Math.abs(in[vj + 0] - in[vi + 0]) < 1e-6f 相等于 in[vj + 0] == in[vi + 0]
+                // 此处进行交换后，保证了vi是一个lower-left点，vj是一个upper-right点
                 if (Math.abs(in[vj + 0] - in[vi + 0]) < 1e-6f) {
                     if (in[vj + 2] > in[vi + 2]) {
                         int temp = vi;
@@ -688,7 +730,7 @@ public class RecastMeshDetail {
                 idx[0] = 0;
                 idx[1] = nn;
                 int nidx = 2;
-                for (int k = 0; k < nidx - 1;) {
+                for (int k = 0; k < nidx - 1; ) {
                     int a = idx[k];
                     int b = idx[k + 1];
                     int va = a * 3;
@@ -773,6 +815,7 @@ public class RecastMeshDetail {
                     pt[1] = (bmax[1] + bmin[1]) * 0.5f;
                     pt[2] = z * sampleDist;
                     // Make sure the samples are not too close to the edges.
+                    // 样例点选择标准：1.点必须在多边形内部；2.点不能距离边太近。
                     if (distToPoly(nin, in, pt) > -sampleDist / 2) {
                         continue;
                     }
@@ -845,11 +888,11 @@ public class RecastMeshDetail {
     }
 
     static void seedArrayWithPolyCenter(Context ctx, CompactHeightfield chf, int[] meshpoly, int poly, int npoly,
-            int[] verts, int bs, HeightPatch hp, List<Integer> array) {
+                                        int[] verts, int bs, HeightPatch hp, List<Integer> array) {
         // Note: Reads to the compact heightfield are offset by border size (bs)
         // since border size offset is already removed from the polymesh vertices.
 
-        int offset[] = { 0, 0, -1, -1, 0, -1, 1, -1, 1, 0, 1, 1, 0, 1, -1, 1, -1, 0, };
+        int offset[] = {0, 0, -1, -1, 0, -1, 1, -1, 1, 0, 1, 1, 0, 1, -1, 1, -1, 0,};
 
         // Find cell closest to a poly vertex
         int startCellX = 0, startCellY = 0, startSpanIndex = -1;
@@ -890,7 +933,7 @@ public class RecastMeshDetail {
         array.add(startCellX);
         array.add(startCellY);
         array.add(startSpanIndex);
-        int dirs[] = { 0, 1, 2, 3 };
+        int dirs[] = {0, 1, 2, 3};
         Arrays.fill(hp.data, 0, hp.width * hp.height, 0);
         // DFS to move to the center. Note that we need a DFS here and can not just move
         // directly towards the center without recording intermediate nodes, even though the polygons
@@ -976,8 +1019,15 @@ public class RecastMeshDetail {
         queue.add(v3);
     }
 
+    /**
+     * 该函数的作用是把多边形的AABB盒内的span的高度都统计出来
+     * 算法分两步：
+     * 1.先统计多边形内部的span高度，也即先统计AABB盒内和多边形处于同一个region的span，并顺手记录下多边形的边界。
+     * 2.从多边形的边界慢慢向外扩张，统计和多边形连接在一起的span的高度。
+     * 这样做的原因是，一个(x,z)坐标内可能会有多个span，针对当前多边形而言，我们所需要的高度信息是和多边形相连接的那个span的高度。
+     */
     static void getHeightData(Context ctx, CompactHeightfield chf, int[] meshpolys, int poly, int npoly, int[] verts,
-            int bs, HeightPatch hp, int region) {
+                              int bs, HeightPatch hp, int region) {
         // Note: Reads to the compact heightfield are offset by border size (bs)
         // since border size offset is already removed from the polymesh vertices.
 
@@ -992,16 +1042,16 @@ public class RecastMeshDetail {
         if (region != RC_MULTIPLE_REGS) {
             // Copy the height from the same region, and mark region borders
             // as seed points to fill the rest.
-            for (int hy = 0; hy < hp.height; hy++) {
-                int y = hp.ymin + hy + bs;
+            for (int hz = 0; hz < hp.height; hz++) {
+                int z = hp.ymin + hz + bs;
                 for (int hx = 0; hx < hp.width; hx++) {
                     int x = hp.xmin + hx + bs;
-                    CompactCell c = chf.cells[x + y * chf.width];
+                    CompactCell c = chf.cells[x + z * chf.width];
                     for (int i = c.index, ni = c.index + c.count; i < ni; ++i) {
                         CompactSpan s = chf.spans[i];
                         if (s.reg == region) {
                             // Store height
-                            hp.data[hx + hy * hp.width] = s.y;
+                            hp.data[hx + hz * hp.width] = s.y;
                             empty = false;
                             // If any of the neighbours is not in same region,
                             // add the current location as flood fill start
@@ -1009,8 +1059,8 @@ public class RecastMeshDetail {
                             for (int dir = 0; dir < 4; ++dir) {
                                 if (GetCon(s, dir) != RC_NOT_CONNECTED) {
                                     int ax = x + GetDirOffsetX(dir);
-                                    int ay = y + GetDirOffsetY(dir);
-                                    int ai = chf.cells[ax + ay * chf.width].index + GetCon(s, dir);
+                                    int az = z + GetDirOffsetY(dir);
+                                    int ai = chf.cells[ax + az * chf.width].index + GetCon(s, dir);
                                     CompactSpan as = chf.spans[ai];
                                     if (as.reg != region) {
                                         border = true;
@@ -1019,7 +1069,7 @@ public class RecastMeshDetail {
                                 }
                             }
                             if (border) {
-                                push3(queue, x, y, i);
+                                push3(queue, x, z, i);
                             }
                             break;
                         }
@@ -1042,10 +1092,11 @@ public class RecastMeshDetail {
         // sample wrong heights.
         while (head * 3 < queue.size()) {
             int cx = queue.get(head * 3 + 0);
-            int cy = queue.get(head * 3 + 1);
+            int cz = queue.get(head * 3 + 1);
             int ci = queue.get(head * 3 + 2);
             head++;
             if (head >= RETRACT_SIZE) {
+                // 这一步的目的是为了节省内存，执行过高度赋值的坐标就没有用了，可以删掉了
                 head = 0;
                 queue = queue.subList(RETRACT_SIZE * 3, queue.size());
             }
@@ -1057,27 +1108,31 @@ public class RecastMeshDetail {
                 }
 
                 int ax = cx + GetDirOffsetX(dir);
-                int ay = cy + GetDirOffsetY(dir);
+                int az = cz + GetDirOffsetY(dir);
                 int hx = ax - hp.xmin - bs;
-                int hy = ay - hp.ymin - bs;
+                int hz = az - hp.ymin - bs;
 
-                if (hx < 0 || hx >= hp.width || hy < 0 || hy >= hp.height) {
+                if (hx < 0 || hx >= hp.width || hz < 0 || hz >= hp.height) {
                     continue;
                 }
 
-                if (hp.data[hx + hy * hp.width] != RC_UNSET_HEIGHT) {
+                if (hp.data[hx + hz * hp.width] != RC_UNSET_HEIGHT) {
                     continue;
                 }
 
-                int ai = chf.cells[ax + ay * chf.width].index + GetCon(cs, dir);
+                int ai = chf.cells[ax + az * chf.width].index + GetCon(cs, dir);
                 CompactSpan as = chf.spans[ai];
 
-                hp.data[hx + hy * hp.width] = as.y;
-                push3(queue, ax, ay, ai);
+                hp.data[hx + hz * hp.width] = as.y;
+                push3(queue, ax, az, ai);
             }
         }
     }
 
+    /**
+     * @param vpoly 多边形的初始顶点信息，不包含后续在边上或者多边形内部增加的点
+     * @return 返回0表示线段[va-->vb]不在多边形的边界上；返回1表示线段[va-->vb]在多边形的边界上。
+     */
     static int getEdgeFlags(float[] verts, int va, int vb, float[] vpoly, int npoly) {
         // The flag returned by this function matches getDetailTriEdgeFlags in Detour.
         // Figure out if edge (va,vb) is part of the polygon boundary.
@@ -1105,7 +1160,7 @@ public class RecastMeshDetail {
     ///
     /// @see rcAllocPolyMeshDetail, rcPolyMesh, rcCompactHeightfield, rcPolyMeshDetail, rcConfig
     public static PolyMeshDetail buildPolyMeshDetail(Context ctx, PolyMesh mesh, CompactHeightfield chf,
-            float sampleDist, float sampleMaxError) {
+                                                     float sampleDist, float sampleMaxError) {
 
         ctx.startTimer("BUILD_POLYMESHDETAIL");
         if (mesh.nverts == 0 || mesh.npolys == 0) {
@@ -1124,8 +1179,11 @@ public class RecastMeshDetail {
         float verts[] = new float[256 * 3];
         HeightPatch hp = new HeightPatch();
         int nPolyVerts = 0;
+        // maxhw是所有多边形的AABB盒，在x-axis方向上的最大长度。
+        // maxhh是所有多边形的AABB盒，在z-axis方向上的最大长度。
         int maxhw = 0, maxhh = 0;
 
+        // bounds数组中4个数值为一组，用来统计每个多边形的AABB信息。
         int[] bounds = new int[mesh.npolys * 4];
         float[] poly = new float[nvp * 3];
 
@@ -1203,7 +1261,7 @@ public class RecastMeshDetail {
             for (int j = 0; j < nverts; ++j) {
                 verts[j * 3 + 0] += orig[0];
                 verts[j * 3 + 1] += orig[1] + chf.ch; // Is this offset necessary? See
-                                                      // https://groups.google.com/d/msg/recastnavigation/UQFN6BGCcV0/-1Ny4koOBpkJ
+                // https://groups.google.com/d/msg/recastnavigation/UQFN6BGCcV0/-1Ny4koOBpkJ
                 verts[j * 3 + 2] += orig[2];
             }
             // Offset poly too, will be used to flag checking.
