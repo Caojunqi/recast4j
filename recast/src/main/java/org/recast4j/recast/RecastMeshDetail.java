@@ -492,10 +492,34 @@ public class RecastMeshDetail {
         return nfaces;
     }
 
+    /**
+     * Delaunay三角化算法，目的是为了构建三角形数据
+     * @param ctx
+     * @param npts 多边形当前的总顶点个数，有可能在多边形内部新增了一个顶点
+     * @param pts 多边形当前的总顶点信息
+     * @param nhull 多边形边界顶点数据
+     * @param hull 多边形边界顶点信息
+     * @param tris 三角形数据，四个数值一组，前三个数值表示三角形的顶点索引
+     */
     private static void delaunayHull(Context ctx, int npts, float[] pts, int nhull, int[] hull, List<Integer> tris) {
         int nfaces = 0;
         int maxEdges = npts * 10;
+        // edges表示边信息，每四个数值为一组，前两个数值为顶点索引，假设为s t，
+        // 第三个数值表示，当三角化后，向量s->t左边的三角形是多边形中的第几个三角形；
+        // 第四个数值表示，当三角化后，向量s->t右边的三角形是多边形中的第几个三角形；
         List<Integer> edges = new ArrayList<>(64);
+
+        // 边界点打印
+        if (npts == 12 && nhull == 11) {
+            for (int i = 0; i < nhull; i++) {
+                int x = (int) pts[hull[i] * 3 + 0];
+                int y = (int) pts[hull[i] * 3 + 1];
+                int z = (int) pts[hull[i] * 3 + 2];
+                System.out.println("[" + x + " " + y + " " + z + "]");
+            }
+        }
+
+
         for (int i = 0, j = nhull - 1; i < nhull; j = i++) {
             addEdge(ctx, edges, maxEdges, hull[j], hull[i], EV_HULL, EV_UNDEF);
         }
