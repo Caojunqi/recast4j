@@ -508,18 +508,6 @@ public class RecastMeshDetail {
         // 第三个数值表示，当三角化后，向量s->t左边的三角形是多边形中的第几个三角形；
         // 第四个数值表示，当三角化后，向量s->t右边的三角形是多边形中的第几个三角形；
         List<Integer> edges = new ArrayList<>(64);
-
-        // 边界点打印
-        if (npts == 12 && nhull == 11) {
-            for (int i = 0; i < nhull; i++) {
-                int x = (int) pts[hull[i] * 3 + 0];
-                int y = (int) pts[hull[i] * 3 + 1];
-                int z = (int) pts[hull[i] * 3 + 2];
-                System.out.println("[" + x + " " + y + " " + z + "]");
-            }
-        }
-
-
         for (int i = 0, j = nhull - 1; i < nhull; j = i++) {
             addEdge(ctx, edges, maxEdges, hull[j], hull[i], EV_HULL, EV_UNDEF);
         }
