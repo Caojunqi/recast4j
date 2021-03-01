@@ -473,6 +473,12 @@ public class DetourCommon {
                 a * pts[pa + 2] + b * pts[pb + 2] + c * pts[pc + 2] };
     }
 
+    /**
+     * compute the next highest power of 2 of 32-bit v
+     * 2的幂次方从小到大排列是：1 2 4 8 16 32 64 ...
+     * 本函数的目的是为了找出距离v最近的一个2的幂次方，例如v处于[33,63]之间，计算结果就是64；v处于[5,7]之间，计算结果就是8。
+     * 如果v小于等于0，返回0。
+     */
     public static int nextPow2(int v) {
         v--;
         v |= v >> 1;

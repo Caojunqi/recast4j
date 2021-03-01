@@ -389,8 +389,7 @@ public class NavMesh {
     /// @par
     ///
     /// The add operation will fail if the data is in the wrong format, the
-    /// allocated tile
-    /// space is full, or there is a tile already at the specified reference.
+    /// allocated tile space is full, or there is a tile already at the specified reference.
     ///
     /// The lastRef parameter is used to restore a tile with the same tile
     /// reference it had previously used. In this case the #long's for the

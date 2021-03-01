@@ -75,6 +75,12 @@ public class NavMeshBuilder {
 
     }
 
+    /**
+     * 该算法把items中从imin到imax项的AABB盒进行比较，得出一个能包括这些AABB盒的一个大AABB盒
+     *
+     * @param items 每一项都代表一个多边形的AABB盒
+     * @return 这个大的AABB盒数据
+     */
     private static int[][] calcExtends(BVItem[] items, int nitems, int imin, int imax) {
         int[] bmin = new int[3];
         int[] bmax = new int[3];
@@ -102,7 +108,7 @@ public class NavMeshBuilder {
             if (it.bmax[2] > bmax[2])
                 bmax[2] = it.bmax[2];
         }
-        return new int[][] { bmin, bmax };
+        return new int[][]{bmin, bmax};
     }
 
     private static int longestAxis(int x, int y, int z) {
@@ -251,22 +257,22 @@ public class NavMeshBuilder {
         outcode |= (pt.get(2) < bmin[2]) ? ZM : 0;
 
         switch (outcode) {
-        case XP:
-            return 0;
-        case XP | ZP:
-            return 1;
-        case ZP:
-            return 2;
-        case XM | ZP:
-            return 3;
-        case XM:
-            return 4;
-        case XM | ZM:
-            return 5;
-        case ZM:
-            return 6;
-        case XP | ZM:
-            return 7;
+            case XP:
+                return 0;
+            case XP | ZP:
+                return 1;
+            case ZP:
+                return 2;
+            case XM | ZP:
+                return 3;
+            case XM:
+                return 4;
+            case XM | ZM:
+                return 5;
+            case ZM:
+                return 6;
+            case XP | ZM:
+                return 7;
         }
 
         return 0xff;
@@ -275,9 +281,7 @@ public class NavMeshBuilder {
     /**
      * Builds navigation mesh tile data from the provided tile creation data.
      *
-     * @param params
-     *            Tile creation data.
-     *
+     * @param params Tile creation data.
      * @return created tile data
      */
     public static MeshData createNavMeshData(NavMeshDataCreateParams params) {
@@ -324,6 +328,10 @@ public class NavMeshBuilder {
             float[] bmax = new float[3];
             vCopy(bmin, params.bmin);
             vCopy(bmax, params.bmax);
+            // 注意：这里bmin[1] bmax[1]和hmin hmax的含义不一样
+            // bmin[1] bmax[1]是初始地图的AABB包围盒中y-axis上的最小值和最大值；
+            // hmin hmax是经过处理后的地图在y-axis上的最小值和最大值。
+            // 初始地图尚未经过处理，里面的多边形顶点很多都是不可走区域。
             bmin[1] = hmin;
             bmax[1] = hmax;
 

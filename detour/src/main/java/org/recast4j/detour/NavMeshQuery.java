@@ -648,7 +648,7 @@ public class NavMeshQuery {
      * The start and end positions are used to calculate traversal costs. (The y-values impact the result.)
      *
      * @param startRef
-     *            The refrence id of the start polygon.
+     *            The reference id of the start polygon.
      * @param endRef
      *            The reference id of the end polygon.
      * @param startPos
