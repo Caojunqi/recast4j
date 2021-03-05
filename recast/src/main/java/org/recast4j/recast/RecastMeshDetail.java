@@ -206,26 +206,55 @@ public class RecastMeshDetail {
         return dx * dx + dy * dy + dz * dz;
     }
 
+    /**
+     * 计算点pt到线段(p,q)的最短距离，也就是垂直距离
+     * 储备知识：假设有两个向量v1(x1,y1) v2(x2,y2)，
+     * v1 · v2 = x1*x2+y1*y2 = |v1|*|v2|*cosΘ
+     * v1 X v2 = x1*y2-y1*x2 = 向量v1 v2组成的平行四边形的面积
+     *
+     * @return 点pt到线段(p, q)距离的平方
+     */
     private static float distancePtSeg2d(float[] verts, int pt, float[] poly, int p, int q) {
+        //(pqx,pqz)是在xz平面上点p到点q的向量
         float pqx = poly[q + 0] - poly[p + 0];
         float pqz = poly[q + 2] - poly[p + 2];
+        //(dx,dz)是在xz平面上点p到点pt的向量
         float dx = verts[pt + 0] - poly[p + 0];
         float dz = verts[pt + 2] - poly[p + 2];
+        // d是线段(p,q)的长度的平方
         float d = pqx * pqx + pqz * pqz;
+        // t是向量(p,q)和向量(p,pt)的点积，=线段(p,q)的长度 * 线段(p,pt)的长度 * cosθ，西塔为向量(p,q)和向量(p,pt)的夹角。
         float t = pqx * dx + pqz * dz;
         if (d > 0) {
+            // 因为d是线段(p,q)的长度的平方，t除以d之后的值，= 线段(p,pt)的长度 * cosθ / 线段(p,q)的长度
+            // 假设点m为点pt到线段(p,q)的最短距离所在点，
+            // t/d的值就是线段(p,m)与线段(p,q)的比例
             t /= d;
         }
         if (t < 0) {
+            // t小于0，表示点m在线段(p,q)外部，在p的外部
             t = 0;
         } else if (t > 1) {
+            // t大于1，表示点m在线段(p,q)外部，在q的外部
             t = 1;
         }
 
+        // (poly[p + 0] + t * pqx, poly[p + 2] + t * pqz) 即为点m的坐标
         dx = poly[p + 0] + t * pqx - verts[pt + 0];
         dz = poly[p + 2] + t * pqz - verts[pt + 2];
-
         return dx * dx + dz * dz;
+
+        // 这里给出第二种计算方法，是利用面积来计算的，逻辑比较简单
+        // (pqx,pqz)是在xz平面上点p到点q的向量
+        // float pqx = poly[q + 0] - poly[p + 0];
+        // float pqz = poly[q + 2] - poly[p + 2];
+        // (dx,dz)是在xz平面上点p到点pt的向量
+        // float dx = verts[pt + 0] - poly[p + 0];
+        // float dz = verts[pt + 2] - poly[p + 2];
+        // Math.abs(pqx * dz - pqz * dx)的结果是点p pt q组成的平行四边形的面积，也即向量(p,pt)和向量(p,q)的面积
+        // 根据平行四边形面积计算公式：面积 = 底 * 高，就能计算出点pt到线段pq的长度了
+        // 不过这种做法逻辑有点不严谨，没有考虑点pt的投射点在线段(p,q)外部的情况，仅供学习。
+        // float dis = Math.abs(pqx * dz - pqz * dx) / (float)Math.sqrt(d);
     }
 
     private static float distToTriMesh(float[] p, float[] verts, int nverts, List<Integer> tris, int ntris) {
@@ -494,12 +523,13 @@ public class RecastMeshDetail {
 
     /**
      * Delaunay三角化算法，目的是为了构建三角形数据
+     *
      * @param ctx
-     * @param npts 多边形当前的总顶点个数，有可能在多边形内部新增了一个顶点
-     * @param pts 多边形当前的总顶点信息
+     * @param npts  多边形当前的总顶点个数，有可能在多边形内部新增了一个顶点
+     * @param pts   多边形当前的总顶点信息
      * @param nhull 多边形边界顶点数据
-     * @param hull 多边形边界顶点信息
-     * @param tris 三角形数据，四个数值一组，前三个数值表示三角形的顶点索引
+     * @param hull  多边形边界顶点信息
+     * @param tris  三角形数据，四个数值一组，前三个数值表示三角形的顶点索引
      */
     private static void delaunayHull(Context ctx, int npts, float[] pts, int nhull, int[] hull, List<Integer> tris) {
         int nfaces = 0;
