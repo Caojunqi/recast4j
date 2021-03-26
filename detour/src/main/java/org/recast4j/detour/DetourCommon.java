@@ -212,8 +212,14 @@ public class DetourCommon {
     ///
     /// Basically, this function will return true if the specified points are
     /// close enough to eachother to be considered colocated.
-    static boolean vEqual(float[] p0, float[] p1) {
+    public static boolean vEqual(float[] p0, float[] p1) {
         float d = vDistSqr(p0, p1);
+        return d < thr;
+    }
+
+    // @return True if the points are considered to be at the same location in xz-plane.
+    public static boolean vEqual2D(float[] p0, float[] p1) {
+        float d = vDist2DSqr(p0, p1);
         return d < thr;
     }
 
@@ -241,6 +247,12 @@ public class DetourCommon {
     /// ignored.
     public static float vPerp2D(float[] u, float[] v) {
         return u[2] * v[0] - u[0] * v[2];
+    }
+
+    // Cross product.
+    // Returns the z component (as we are working in 2D).
+    public static float vCross2D(float[] u, float[] v) {
+        return u[0] * v[2] - u[2] * v[0];
     }
 
     /// @}
@@ -351,7 +363,7 @@ public class DetourCommon {
     /// @par
     ///
     /// All points are projected onto the xz-plane, so the y-values are ignored.
-    static boolean pointInPolygon(float[] pt, float[] verts, int nverts) {
+    public static boolean pointInPolygon(float[] pt, float[] verts, int nverts) {
         // TODO: Replace pnpoly with triArea2D tests?
         int i, j;
         boolean c = false;
@@ -392,7 +404,7 @@ public class DetourCommon {
             rmin = Math.min(rmin, d);
             rmax = Math.max(rmax, d);
         }
-        return new float[] { rmin, rmax };
+        return new float[]{rmin, rmax};
     }
 
     static boolean overlapRange(float amin, float amax, float bmin, float bmax, float eps) {
@@ -410,7 +422,7 @@ public class DetourCommon {
             int va = j * 3;
             int vb = i * 3;
 
-            float[] n = new float[] { polya[vb + 2] - polya[va + 2], 0, -(polya[vb + 0] - polya[va + 0]) };
+            float[] n = new float[]{polya[vb + 2] - polya[va + 2], 0, -(polya[vb + 0] - polya[va + 0])};
 
             float[] aminmax = projectPoly(n, polya, npolya);
             float[] bminmax = projectPoly(n, polyb, npolyb);
@@ -423,7 +435,7 @@ public class DetourCommon {
             int va = j * 3;
             int vb = i * 3;
 
-            float[] n = new float[] { polyb[vb + 2] - polyb[va + 2], 0, -(polyb[vb + 0] - polyb[va + 0]) };
+            float[] n = new float[]{polyb[vb + 2] - polyb[va + 2], 0, -(polyb[vb + 0] - polyb[va + 0])};
 
             float[] aminmax = projectPoly(n, polya, npolya);
             float[] bminmax = projectPoly(n, polyb, npolyb);
@@ -468,9 +480,9 @@ public class DetourCommon {
         int pb = (tri - 1) * 3;
         int pc = tri * 3;
 
-        return new float[] { a * pts[pa] + b * pts[pb] + c * pts[pc],
+        return new float[]{a * pts[pa] + b * pts[pb] + c * pts[pc],
                 a * pts[pa + 1] + b * pts[pb + 1] + c * pts[pc + 1],
-                a * pts[pa + 2] + b * pts[pb + 2] + c * pts[pc + 2] };
+                a * pts[pa + 2] + b * pts[pb + 2] + c * pts[pc + 2]};
     }
 
     /**

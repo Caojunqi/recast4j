@@ -74,7 +74,9 @@ public class NavMesh {
     private final MeshTile[] m_posLookup; /// < Tile hash lookup.
     MeshTile m_nextFree; /// < Freelist of tiles.
     private final MeshTile[] m_tiles; /// < List of tiles.
-    /** The maximum number of vertices per navigation polygon. */
+    /**
+     * The maximum number of vertices per navigation polygon.
+     */
     private final int m_maxVertPerPoly;
     private int m_tileCount;
 
@@ -97,8 +99,7 @@ public class NavMesh {
     /**
      * Gets the polygon reference for the tile's base polygon.
      *
-     * @param tile
-     *            The tile.
+     * @param tile The tile.
      * @return The polygon reference for the base polygon in the specified tile.
      */
     public long getPolyRefBase(MeshTile tile) {
@@ -112,14 +113,11 @@ public class NavMesh {
     /**
      * Derives a standard polygon reference.
      *
-     * @note This function is generally meant for internal use only.
-     * @param salt
-     *            The tile's salt value.
-     * @param it
-     *            The index of the tile.
-     * @param ip
-     *            The index of the polygon within the tile.
+     * @param salt The tile's salt value.
+     * @param it   The index of the tile.
+     * @param ip   The index of the polygon within the tile.
      * @return encoded polygon reference
+     * @note This function is generally meant for internal use only.
      */
     public static long encodePolyId(int salt, int it, int ip) {
         return (((long) salt) << (DT_POLY_BITS + DT_TILE_BITS)) | ((long) it << DT_POLY_BITS) | ip;
@@ -132,7 +130,7 @@ public class NavMesh {
     /// @param[out] it The index of the tile.
     /// @param[out] ip The index of the polygon within the tile.
     /// @see #encodePolyId
-    static int[] decodePolyId(long ref) {
+    public static int[] decodePolyId(long ref) {
         int salt;
         int it;
         int ip;
@@ -142,7 +140,7 @@ public class NavMesh {
         salt = (int) ((ref >> (DT_POLY_BITS + DT_TILE_BITS)) & saltMask);
         it = (int) ((ref >> DT_POLY_BITS) & tileMask);
         ip = (int) (ref & polyMask);
-        return new int[] { salt, it, ip };
+        return new int[]{salt, it, ip};
     }
 
     /// Extracts a tile's salt value from the specified polygon reference.
@@ -168,7 +166,7 @@ public class NavMesh {
     /// @note This function is generally meant for internal use only.
     /// @param[in] ref The polygon reference.
     /// @see #encodePolyId
-    static int decodePolyIdPoly(long ref) {
+    public static int decodePolyIdPoly(long ref) {
         long polyMask = (1L << DT_POLY_BITS) - 1;
         return (int) (ref & polyMask);
     }
@@ -193,14 +191,13 @@ public class NavMesh {
     /**
      * Calculates the tile grid location for the specified world position.
      *
-     * @param pos
-     *            The world position for the query. [(x, y, z)]
+     * @param pos The world position for the query. [(x, y, z)]
      * @return 2-element int array with (tx,ty) tile location
      */
     public int[] calcTileLoc(float[] pos) {
         int tx = (int) Math.floor((pos[0] - m_orig[0]) / m_tileWidth);
         int ty = (int) Math.floor((pos[2] - m_orig[2]) / m_tileHeight);
-        return new int[] { tx, ty };
+        return new int[]{tx, ty};
     }
 
     public Result<Tupple2<MeshTile, Poly>> getTileAndPolyByRef(long ref) {
@@ -229,14 +226,14 @@ public class NavMesh {
     /// reference is valid. This function is faster than #getTileAndPolyByRef,
     /// but
     /// it does not validate the reference.
-    Tupple2<MeshTile, Poly> getTileAndPolyByRefUnsafe(long ref) {
+    public Tupple2<MeshTile, Poly> getTileAndPolyByRefUnsafe(long ref) {
         int[] saltitip = decodePolyId(ref);
         int it = saltitip[1];
         int ip = saltitip[2];
         return new Tupple2<>(m_tiles[it], m_tiles[it].data.polys[ip]);
     }
 
-    boolean isValidPolyRef(long ref) {
+    public boolean isValidPolyRef(long ref) {
         if (ref == 0) {
             return false;
         }
@@ -571,7 +568,7 @@ public class NavMesh {
 
         tile.flags = 0;
         tile.links.clear();
-		tile.linksFreeList=NavMesh.DT_NULL_LINK;
+        tile.linksFreeList = NavMesh.DT_NULL_LINK;
 
         // Update salt, salt should never be zero.
         tile.salt = (tile.salt + 1) & ((1 << DT_SALT_BITS) - 1);
@@ -749,7 +746,7 @@ public class NavMesh {
                 continue;
             }
 
-            float[] ext = new float[] { targetCon.rad, target.data.header.walkableClimb, targetCon.rad };
+            float[] ext = new float[]{targetCon.rad, target.data.header.walkableClimb, targetCon.rad};
 
             // Find polygon to connect to.
             float[] p = new float[3];
@@ -802,7 +799,7 @@ public class NavMesh {
     }
 
     Tupple3<long[], float[], Integer> findConnectingPolys(float[] verts, int va, int vb, MeshTile tile, int side,
-            int maxcon) {
+                                                          int maxcon) {
         if (tile == null) {
             return new Tupple3<>(null, null, 0);
         }
@@ -946,7 +943,7 @@ public class NavMesh {
             OffMeshConnection con = tile.data.offMeshCons[i];
             Poly poly = tile.data.polys[con.poly];
 
-            float[] ext = new float[] { con.rad, tile.data.header.walkableClimb, con.rad };
+            float[] ext = new float[]{con.rad, tile.data.header.walkableClimb, con.rad};
 
             // Find polygon to connect to.
             FindNearestPolyResult nearestPoly = findNearestPolyInTile(tile, con.pos, ext);
@@ -1021,12 +1018,12 @@ public class NavMesh {
             for (int j = 0; j < 3; ++j) {
                 if (tris[ti + j] < poly.vertCount) {
                     int index = poly.verts[tris[ti + j]] * 3;
-                    v[j] = new float[] { tile.data.verts[index], tile.data.verts[index + 1],
-                            tile.data.verts[index + 2] };
+                    v[j] = new float[]{tile.data.verts[index], tile.data.verts[index + 1],
+                            tile.data.verts[index + 2]};
                 } else {
                     int index = (pd.vertBase + (tris[ti + j] - poly.vertCount)) * 3;
-                    v[j] = new float[] { tile.data.detailVerts[index], tile.data.detailVerts[index + 1],
-                            tile.data.detailVerts[index + 2] };
+                    v[j] = new float[]{tile.data.detailVerts[index], tile.data.detailVerts[index + 1],
+                            tile.data.detailVerts[index + 2]};
                 }
             }
 
@@ -1080,12 +1077,12 @@ public class NavMesh {
             for (int k = 0; k < 3; ++k) {
                 if (tile.data.detailTris[t + k] < poly.vertCount) {
                     int index = poly.verts[tile.data.detailTris[t + k]] * 3;
-                    v[k] = new float[] { tile.data.verts[index], tile.data.verts[index + 1],
-                            tile.data.verts[index + 2] };
+                    v[k] = new float[]{tile.data.verts[index], tile.data.verts[index + 1],
+                            tile.data.verts[index + 2]};
                 } else {
                     int index = (pd.vertBase + (tile.data.detailTris[t + k] - poly.vertCount)) * 3;
-                    v[k] = new float[] { tile.data.detailVerts[index], tile.data.detailVerts[index + 1],
-                            tile.data.detailVerts[index + 2] };
+                    v[k] = new float[]{tile.data.detailVerts[index], tile.data.detailVerts[index + 1],
+                            tile.data.detailVerts[index + 2]};
                 }
             }
             Optional<Float> h = closestHeightPointTriangle(pos, v[0], v[1], v[2]);
@@ -1117,9 +1114,9 @@ public class NavMesh {
         // Off-mesh connections don't have detail polygons.
         if (poly.getType() == Poly.DT_POLYTYPE_OFFMESH_CONNECTION) {
             int i = poly.verts[0] * 3;
-            float[] v0 = new float[] { tile.data.verts[i], tile.data.verts[i + 1], tile.data.verts[i + 2] };
+            float[] v0 = new float[]{tile.data.verts[i], tile.data.verts[i + 1], tile.data.verts[i + 2]};
             i = poly.verts[1] * 3;
-            float[] v1 = new float[] { tile.data.verts[i], tile.data.verts[i + 1], tile.data.verts[i + 2] };
+            float[] v1 = new float[]{tile.data.verts[i], tile.data.verts[i + 1], tile.data.verts[i + 2]};
             Tupple2<Float, Float> dt = distancePtSegSqr2D(pos, v0, v1);
             return new ClosestPointOnPolyResult(false, vLerp(v0, v1, dt.second));
         }
@@ -1182,34 +1179,34 @@ public class NavMesh {
     List<MeshTile> getNeighbourTilesAt(int x, int y, int side) {
         int nx = x, ny = y;
         switch (side) {
-        case 0:
-            nx++;
-            break;
-        case 1:
-            nx++;
-            ny++;
-            break;
-        case 2:
-            ny++;
-            break;
-        case 3:
-            nx--;
-            ny++;
-            break;
-        case 4:
-            nx--;
-            break;
-        case 5:
-            nx--;
-            ny--;
-            break;
-        case 6:
-            ny--;
-            break;
-        case 7:
-            nx++;
-            ny--;
-            break;
+            case 0:
+                nx++;
+                break;
+            case 1:
+                nx++;
+                ny++;
+                break;
+            case 2:
+                ny++;
+                break;
+            case 3:
+                nx--;
+                ny++;
+                break;
+            case 4:
+                nx--;
+                break;
+            case 5:
+                nx--;
+                ny--;
+                break;
+            case 6:
+                ny--;
+                break;
+            case 7:
+                nx++;
+                ny--;
+                break;
         }
         return getTilesAt(nx, ny);
     }
@@ -1438,10 +1435,8 @@ public class NavMesh {
     /**
      * Get flags for edge in detail triangle.
      *
-     * @param triFlags
-     *            The flags for the triangle (last component of detail vertices above).
-     * @param edgeIndex
-     *            The index of the first vertex of the edge. For instance, if 0,
+     * @param triFlags  The flags for the triangle (last component of detail vertices above).
+     * @param edgeIndex The index of the first vertex of the edge. For instance, if 0,
      * @return flags for edge AB.
      */
     public static int getDetailTriEdgeFlags(int triFlags, int edgeIndex) {
