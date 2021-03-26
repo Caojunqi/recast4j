@@ -19,6 +19,8 @@
         <module>detourcrowd</module>
         <module>detourtilecache</module>
         <module>detour-extras</module>
+        <module>recast-demo</module>
+        <module>polyanya</module>
     </modules>
 
     <name>Recast and Detour for Java</name>
