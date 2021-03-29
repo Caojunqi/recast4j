@@ -3,6 +3,8 @@ package org.recast4j.polyanya;
 import org.apache.commons.lang3.Validate;
 import org.recast4j.detour.*;
 
+import java.util.function.Predicate;
+
 import static org.recast4j.detour.DetourCommon.*;
 import static java.lang.Math.*;
 
@@ -182,6 +184,41 @@ public final class PolyanyaHelper {
         Validate.isTrue(abs(triArea2D(left, vAdd(point, vScale(deltaRotated, (float) (number / denom))), right)) < EPSILON);
 
         return vAdd(point, vScale(deltaRotated, (float) (2.0 * number / denom)));
+    }
+
+    /**
+     * 计算a b c三点的排列顺序
+     */
+    public static Orientation getOrientation(float[] a, float[] b, float[] c) {
+        double cross = vCross2D(vSub(b, a), vSub(c, b));
+        if (abs(cross) < EPSILON) {
+            // 三点共线
+            return Orientation.COLLINEAR;
+        } else if (cross > 0) {
+            // a -> b -> c 逆时针
+            return Orientation.CCW;
+        } else {
+            // a -> b -> c 顺时针
+            return Orientation.CW;
+        }
+    }
+
+    // Returns the line intersect between ab and cd as fast as possible.
+    // Uses a and b for the parameterisation.
+    // ASSUMES NO COLLINEARITY.
+    public static float[] lineIntersect2D(float[] a, float[] b, float[] c, float[] d) {
+        float[] ab = vSub(b, a);
+        // return a + ab * (((c - a) * (d - a)) / (ab * (d - c)))
+        double adcNum = vCross2D(vSub(c, a), vSub(d, a));
+        double denom = vCross2D(ab, vSub(d, c));
+        return vAdd(a, vScale(ab, (float) (adcNum / denom)));
+    }
+
+    /**
+     * 对索引index进行标准化，使其取值范围限定在[0,max-1]之间
+     */
+    public static int normalise(int index, int max) {
+        return index - (index >= max ? max : 0);
     }
 
     /**
