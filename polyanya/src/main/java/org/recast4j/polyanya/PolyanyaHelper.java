@@ -15,7 +15,7 @@ import static java.lang.Math.*;
  */
 public final class PolyanyaHelper {
 
-    private final static double EPSILON = 1e-8;
+    private final static double EPSILON = 1e-4f;
     private final static float[] PLOY_PICK_EXT = new float[]{2, 4, 2};
 
     /**
@@ -188,6 +188,7 @@ public final class PolyanyaHelper {
 
     /**
      * 计算a b c三点的排列顺序
+     * 注：原点(0,0)在左上角
      */
     public static Orientation getOrientation(float[] a, float[] b, float[] c) {
         double cross = vCross2D(vSub(b, a), vSub(c, b));

@@ -16,7 +16,7 @@ import static java.lang.Math.*;
  * 参考论文：Compromise-free pathfinding on a navigation mesh. / Cui, Michael L.; Harabor, Daniel D.; Grastien, Alban.
  */
 public class PolyanyaQuery {
-    private final static double EPSILON = 1e-8;
+    private final static double EPSILON = 1e-4f;
     private static final float[] PLOY_PICK_EXT = new float[]{2, 4, 2};
 
     /**
@@ -212,7 +212,7 @@ public class PolyanyaQuery {
         }
     }
 
-    private Result<List<float[]>> findStraightPath() {
+    public Result<List<float[]>> findStraightPath() {
         if (finalNode == null) {
             return Result.invalidParam("Cannot find straight path!!");
         }
@@ -393,7 +393,7 @@ public class PolyanyaQuery {
         float[] root = node.root == -1 ? startPos : getVertexPoint(node.root);
         int out = 0;
 
-        Validate.isTrue(triArea2D(root, node.left, node.right) >= 0);
+        Validate.isTrue(getOrientation(root, node.left, node.right) != Orientation.CCW);
 
         // Check collinearity.
         float[] rootLeft = vSub(node.left, root);
