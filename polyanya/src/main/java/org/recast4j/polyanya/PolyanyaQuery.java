@@ -299,7 +299,6 @@ public class PolyanyaQuery {
      * @return 顶点的全局坐标信息 (x,y,z)
      */
     private float[] index2Point(Poly poly, int index) {
-        Validate.isTrue(index < poly.vertCount);
         return getVertexPoint(poly.verts[normalise(index, poly.vertCount)]);
     }
 
@@ -393,7 +392,7 @@ public class PolyanyaQuery {
         float[] root = node.root == -1 ? startPos : getVertexPoint(node.root);
         int out = 0;
 
-        Validate.isTrue(getOrientation(root, node.left, node.right) != Orientation.CCW);
+        Validate.isTrue(getOrientation(root, node.left, node.right) != Orientation.CW);
 
         // Check collinearity.
         float[] rootLeft = vSub(node.left, root);
@@ -418,7 +417,6 @@ public class PolyanyaQuery {
             for (int i = 0, j = poly.vertCount - 1; i < poly.vertCount; j = i++) {
                 int lastVertex = poly.verts[j];
                 int thisVertex = poly.verts[i];
-                // TODO 这里应该是错了，应该是 this_vertex == node.left_right
                 if (thisVertex == node.rightVertex) {
                     continue;
                 }
@@ -430,8 +428,8 @@ public class PolyanyaQuery {
         }
 
         if (poly.vertCount == 3) {
-            int p1; // V[p1] = t1. Used for poly_right_ind for 1-2 successors.
-            int p2; // V[p2] = t2. Used for poly_right_ind for 2-3 successors.
+            int p1; // V[p1] = t2. Used for poly_right_ind for 2-3 successors.
+            int p2; // V[p2] = t1. Used for poly_right_ind for 1-2 successors.
             // Note that p3 is redundant, as that's the polygon we came from.
 
             // The right point of the triangle.
@@ -439,16 +437,16 @@ public class PolyanyaQuery {
             // The middle point of the triangle.
             float[] t2;
             if (poly.verts[0] == node.rightVertex) {
-                p1 = 0;
-                p2 = 1;
+                p1 = 1;
+                p2 = 0;
                 t2 = getVertexPoint(poly.verts[1]);
             } else if (poly.verts[0] == node.leftVertex) {
-                p1 = 1;
-                p2 = 2;
+                p1 = 2;
+                p2 = 1;
                 t2 = getVertexPoint(poly.verts[2]);
             } else {
-                p1 = 2;
-                p2 = 0;
+                p1 = 0;
+                p2 = 2;
                 t2 = getVertexPoint(poly.verts[0]);
             }
             // The left point of the triangle.
@@ -457,99 +455,97 @@ public class PolyanyaQuery {
             float[] left = node.left;
             float[] right = node.right;
 
-            // Now we need to check the orientation of root-L-t2.
+            // Now we need to check the orientation of root-R-t2.
             // TODO: precompute a shared term for getting orientation,
             // like t2 - root.
-            switch (getOrientation(root, left, t2)) {
+            switch (getOrientation(root, right, t2)) {
                 case CCW:
-                    // LI in (1, 2)
-                    // RI in [1, 2)
+                    // RI in (3, 2)
+                    // LI in [3, 2)
 
-                    // TODO: precompute shared constants (assuming the compiler
-                    // doesn't)
-                    float[] leftIntersect = lineIntersect2D(t1, t2, root, left);
-                    float[] rightIntersect = vEqual2D(right, t1) ? t1 : lineIntersect2D(t1, t2, root, right);
+                    float[] leftIntersect = vEqual2D(left, t3) ? t3 : lineIntersect2D(t2, t3, root, left);
+                    float[] rightIntersect = lineIntersect2D(t2, t3, root, right);
 
-                    // observable(RI, LI)
+                    // observable(LI, RI)
                     searchSuccessors[0] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, rightIntersect, p1);
 
-                    // if we can turn left
-                    if (vEqual2D(left, t3)) {
-                        // left_non_observable(LI,2)
-                        searchSuccessors[1] = Successor.valueOf(Successor.Type.LEFT_NON_OBSERVABLE, t2, leftIntersect, p1);
-                        // left_collinear(2,3)
-                        searchSuccessors[2] = Successor.valueOf(Successor.Type.LEFT_NON_OBSERVABLE, t3, t2, p2);
+                    // if we can turn right
+                    if (vEqual2D(right, t1)) {
+                        // right_non_observable(RI,2)
+                        searchSuccessors[1] = Successor.valueOf(Successor.Type.RIGHT_NON_OBSERVABLE, rightIntersect, t2, p1);
+                        // right_collinear(2,1)
+                        searchSuccessors[2] = Successor.valueOf(Successor.Type.RIGHT_NON_OBSERVABLE, t2, t1, p2);
                         return 3;
                     }
                     return 1;
 
                 case COLLINEAR:
-                    // LI = 2
-                    // RI in [1, 2)
-                    rightIntersect = vEqual2D(right, t1) ? t1 : lineIntersect2D(t1, t2, root, right);
+                    // RI = 2
+                    // LI in [3, 2)
+                    leftIntersect = vEqual2D(left, t3) ? t3 : lineIntersect2D(t2, t3, root, left);
 
-                    // observable(RI,2)
-                    searchSuccessors[0] = Successor.valueOf(Successor.Type.OBSERVABLE, t2, rightIntersect, p1);
+                    // observable(LI,2)
+                    searchSuccessors[0] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, t2, p1);
 
-                    // if we can turn left
-                    if (vEqual2D(left, t3)) {
-                        searchSuccessors[1] = Successor.valueOf(Successor.Type.LEFT_NON_OBSERVABLE, t3, t2, p2);
+                    // if we can turn right
+                    if (vEqual2D(right, t1)) {
+                        searchSuccessors[1] = Successor.valueOf(Successor.Type.RIGHT_NON_OBSERVABLE, t2, t1, p2);
                         return 2;
                     }
                     return 1;
 
                 case CW:
-                    // LI in (2,3]
-                    leftIntersect = vEqual2D(left, t3) ? t3 : lineIntersect2D(t2, t3, root, left);
+                    // RI in (2,1]
+                    rightIntersect = vEqual2D(right, t1) ? t1 : lineIntersect2D(t1, t2, root, right);
 
-                    // Now we need to check th orientation of root-R-t2.
-                    switch (getOrientation(root, right, t2)) {
+                    // Now we need to check th orientation of root-L-t2.
+                    switch (getOrientation(root, left, t2)) {
                         case CW:
-                            // RI in (2,3)
-                            rightIntersect = lineIntersect2D(t2, t3, root, right);
+                            // LI in (2,1)
+                            leftIntersect = lineIntersect2D(t1, t2, root, left);
 
-                            // if we can turn right
-                            if (vEqual2D(right, t1)) {
-                                // right_collinear(1, 2)
-                                searchSuccessors[0] = Successor.valueOf(Successor.Type.RIGHT_NON_OBSERVABLE, t2, t1, p1);
+                            // if we can turn left
+                            if (vEqual2D(left, t3)) {
+                                // left_collinear(3, 2)
+                                searchSuccessors[0] = Successor.valueOf(Successor.Type.LEFT_NON_OBSERVABLE, t3, t2, p1);
 
-                                // right_non_observable(2,RI)
-                                searchSuccessors[1] = Successor.valueOf(Successor.Type.RIGHT_NON_OBSERVABLE, rightIntersect, t2, p2);
+                                // left_non_observable(2,LI)
+                                searchSuccessors[1] = Successor.valueOf(Successor.Type.LEFT_NON_OBSERVABLE, t2, leftIntersect, p2);
 
-                                // observable(RI,LI)
+                                // observable(LI,RI)
                                 searchSuccessors[2] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, rightIntersect, p2);
                                 return 3;
                             }
 
-                            // observable(RI,LI)
+                            // observable(LI,RI)
                             searchSuccessors[0] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, rightIntersect, p2);
                             return 1;
 
                         case COLLINEAR:
-                            // RI = 2
-                            // if we can turn right
-                            if (vEqual2D(right, t1)) {
-                                // right_collinear(1, 2)
-                                searchSuccessors[0] = Successor.valueOf(Successor.Type.RIGHT_NON_OBSERVABLE, t2, t1, p1);
+                            // LI = 2
+                            // if we can turn left
+                            if (vEqual2D(left, t3)) {
+                                // left_collinear(3, 2)
+                                searchSuccessors[0] = Successor.valueOf(Successor.Type.LEFT_NON_OBSERVABLE, t3, t2, p1);
 
-                                // observable(2,LI)
-                                searchSuccessors[1] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, t2, p2);
+                                // observable(2,RI)
+                                searchSuccessors[1] = Successor.valueOf(Successor.Type.OBSERVABLE, t2, rightIntersect, p2);
                                 return 2;
                             }
 
-                            // observable(2,LI)
-                            searchSuccessors[0] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, t2, p2);
+                            // observable(2,RI)
+                            searchSuccessors[0] = Successor.valueOf(Successor.Type.OBSERVABLE, t2, rightIntersect, p2);
                             return 1;
 
                         case CCW:
-                            // RI in [1, 2)
-                            rightIntersect = vEqual2D(right, t1) ? t1 : lineIntersect2D(t1, t2, root, right);
+                            // LI in [3, 2)
+                            leftIntersect = vEqual2D(left, t3) ? t3 : lineIntersect2D(t2, t3, root, left);
 
-                            // observable(RI,2)
-                            searchSuccessors[0] = Successor.valueOf(Successor.Type.OBSERVABLE, t2, rightIntersect, p1);
+                            // observable(LI,2)
+                            searchSuccessors[0] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, t2, p1);
 
-                            // observable(2,LI)
-                            searchSuccessors[1] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, t2, p2);
+                            // observable(2,RI)
+                            searchSuccessors[1] = Successor.valueOf(Successor.Type.OBSERVABLE, t2, rightIntersect, p2);
                             return 2;
 
                         default:
@@ -563,11 +559,6 @@ public class PolyanyaQuery {
 
         // It is not collinear.
         // Find the starting vertex (the "right" vertex).
-
-        // Note that "_ind" means "index in V/P",
-        // "_vertex" means "index of mesh_vertices".
-        // "_vertex_obj" means "object of the vertex" and
-        // "_p" means "point".
         int rightIndex = -1;
         for (int temp = 0; temp < poly.vertCount; temp++) {
             if (poly.verts[temp] == node.rightVertex) {
@@ -579,7 +570,7 @@ public class PolyanyaQuery {
         // Note that left_ind MUST be greater than right_ind.
         // This will make binary searching easier.
         int leftIndex = poly.vertCount + rightIndex - 1;
-        Validate.isTrue(poly.verts[leftIndex] == node.leftVertex);
+        Validate.isTrue(poly.verts[normalise(leftIndex, poly.vertCount)] == node.leftVertex);
 
         // Find whether we can turn at either endpoint
         float[] rightPoint = getVertexPoint(node.rightVertex);
@@ -587,80 +578,82 @@ public class PolyanyaQuery {
         boolean rightLiesVertex = vEqual2D(rightPoint, node.right);
         boolean leftLiesVertex = vEqual2D(leftPoint, node.left);
 
-        // find the transition between non-observable-right and observable.
+        // find the transition between non-observable-left and observable.
         // we will call this A, defined by:
-        // "first P such that root-right-p is strictly CCW".
-        // lower bound is right+1, as root-right-right is not CCW (it is collinear).
-        // upper bound is left.
+        // "first P such that root-left-p is strictly CCW".
+        // upper bound is left-1, as root-left-left is not CCW (it is collinear).
+        // lower bound is right.
         // the "transition" will lie in the range [A-1, A)
-        final float[] root_right = vSub(node.right, root);
+        final float[] root_left = vSub(node.left, root);
         int A = -1;
-        if (rightLiesVertex) {
-            // Check whether root-right-right+1 is collinear or CCW.
-            float[] right_p1 = index2Point(poly, normalise(rightIndex + 1, poly.vertCount));
-            if (vCross2D(root_right, vSub(right_p1, node.right)) > -EPSILON) {
-                A = rightIndex + 1;
+        if (leftLiesVertex) {
+            // Check whether [root -> left -> left-1] is collinear or CCW.
+            float[] left_m1 = index2Point(poly, normalise(leftIndex - 1, poly.vertCount));
+            if (vCross2D(root_left, vSub(left_m1, node.left)) > -EPSILON) {
+                A = leftIndex - 1;
             }
-        } else {
-            A = binarySearch(poly, rightIndex + 1, leftIndex, point -> {
+        }
+        if (A == -1) {
+            A = binarySearch(poly, rightIndex, leftIndex - 1, point -> {
                 // STRICTLY CCW
-                return vCross2D(root_right, vSub(point, node.right)) > EPSILON;
-            }, false);
+                return vCross2D(root_left, vSub(point, node.left)) > EPSILON;
+            }, true);
         }
         Validate.isTrue(A != -1);
 
         int normalised_A = normalise(A, poly.vertCount);
-        int normalised_Am1 = normalise(A - 1, poly.vertCount);
+        int normalised_Ap1 = normalise(A + 1, poly.vertCount);
         float[] A_p = index2Point(poly, normalised_A);
-        float[] Am1_p = index2Point(poly, normalised_Am1);
-        float[] rightIntersect = rightLiesVertex && A == rightIndex + 1 ? node.right : lineIntersect2D(A_p, Am1_p, root, node.right);
+        float[] Ap1_p = index2Point(poly, normalised_Ap1);
+        float[] leftIntersect = leftLiesVertex && A == leftIndex - 1 ? node.left : lineIntersect2D(A_p, Ap1_p, root, node.left);
 
-        // find the transition between observable and non-observable-left.
+        // find the transition between observable and non-observable-right.
         // we will call this B, defined by:
-        // "first P such that root-left-p is strictly CW".
-        // lower-bound is A - 1 (in the same segment as A).
-        // upper bound is left-1, as we don't want root-left-left.
-        // the "transition" will lie in the range (B, B+1]
-        final float[] root_left = vSub(node.left, root);
+        // "first P such that root-right-p is strictly CW".
+        // upper bound is A + 1 (in the same segment as A).
+        // lower bound is right + 1, as we don't want root-right-right.
+        // the "transition" will lie in the range (B, B-1]
+        final float[] root_right = vSub(node.right, root);
         int B = -1;
-        if (leftLiesVertex) {
-            // Check whether root-left-left-1 is collinear or CW.
-            float[] left_m1 = index2Point(poly, normalise(leftIndex - 1, poly.vertCount));
-            if (vCross2D(root_left, vSub(left_m1, node.left)) < EPSILON) {
-                // Intersects at left, so...
-                // we should use left_ind-1!
-                B = leftIndex - 1;
+        if (rightLiesVertex) {
+            // Check whether [root -> right -> left+1] is collinear or CW.
+            float[] right_p1 = index2Point(poly, normalise(rightIndex + 1, poly.vertCount));
+            if (vCross2D(root_right, vSub(right_p1, node.right)) < EPSILON) {
+                // Intersects at right, so...
+                // we should use right_ind+1!
+                B = rightIndex + 1;
             }
-        } else {
-            B = binarySearch(poly, A - 1, leftIndex - 1, point -> {
+        }
+        if (B == -1) {
+            B = binarySearch(poly, rightIndex + 1, A + 1, point -> {
                 // STRICTLY CW.
-                return vCross2D(root_left, vSub(point, node.left)) < -EPSILON;
-            }, true);
+                return vCross2D(root_right, vSub(point, node.right)) < -EPSILON;
+            }, false);
         }
         Validate.isTrue(B != -1);
 
         int normalised_B = normalise(B, poly.vertCount);
-        int normalised_Bp1 = normalise(B + 1, poly.vertCount);
+        int normalised_Bm1 = normalise(B - 1, poly.vertCount);
         float[] B_p = index2Point(poly, normalised_B);
-        float[] Bp1_p = index2Point(poly, normalised_Bp1);
-        float[] leftIntersect = leftLiesVertex && B == leftIndex - 1 ? node.left : lineIntersect2D(B_p, Bp1_p, root, node.left);
+        float[] Bm1_p = index2Point(poly, normalised_Bm1);
+        float[] rightIntersect = rightLiesVertex && B == rightIndex + 1 ? node.right : lineIntersect2D(B_p, Bm1_p, root, node.right);
 
         if (rightLiesVertex) {
             // Generate non-observable.
 
-            // Generate non-observable to Am1.
-            // Generate non-observable from Am1 to intersect
-            // if right_intersect != Am1_p.
+            // Generate non-observable to Bm1.
+            // Generate non-observable from Bm1 to intersect
+            // if right_intersect != Bm1_p.
 
             // We always generate successors from last_ind to cur_ind.
-            // right_ind should always be normalised.
+            // left_ind should always be normalised.
             Validate.isTrue(normalise(rightIndex, poly.vertCount) == rightIndex);
             int last_ind = rightIndex;
             int cur_ind = normalise(rightIndex + 1, poly.vertCount);
 
-            // Generate non-observable to Am1.
-            while (last_ind != normalised_Am1) {
-                // Generate last-cur, turning at right.
+            // Generate non-observable to Ap1.
+            while (last_ind != normalised_Bm1) {
+                // Generate last-cur, turning at left.
                 searchSuccessors[out++] = Successor.valueOf(Successor.Type.RIGHT_NON_OBSERVABLE, index2Point(poly, cur_ind), index2Point(poly, last_ind), last_ind);
 
                 last_ind = cur_ind++;
@@ -668,40 +661,40 @@ public class PolyanyaQuery {
                     cur_ind = 0;
                 }
             }
-            Validate.isTrue(cur_ind == normalised_A);
+            Validate.isTrue(cur_ind == normalised_B);
 
-            if (!vEqual2D(rightIntersect, Am1_p)) {
+            if (!vEqual2D(rightIntersect, Bm1_p)) {
                 // Generate Am1-right_intersect, turning at right.
-                searchSuccessors[out++] = Successor.valueOf(Successor.Type.RIGHT_NON_OBSERVABLE, rightIntersect, Am1_p, normalised_Am1);
+                searchSuccessors[out++] = Successor.valueOf(Successor.Type.RIGHT_NON_OBSERVABLE, rightIntersect, Bm1_p, normalised_Bm1);
             }
         }
 
-        // Start at Am1.
+        // Start at Bm1.
         // last_node = right_intersect
-        // If index is normalised_Bp1, go from last_node to left_intersect.
+        // If index is normalised_Bm1, go from last_node to left_intersect.
         // (And terminate too!)
         // Else, go to the end and set that as last_node
 
         // Special case when there are NO observable successors.
-        if (A == B + 2) {
+        if (A == B - 2) {
             // Do nothing.
         }
         // Special case when there only exists one observable successor.
         // Note that we used the non-normalised indices for this.
-        else if (A == B + 1) {
-            searchSuccessors[out++] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, rightIntersect, normalised_Am1);
+        else if (A == B - 1) {
+            searchSuccessors[out++] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, rightIntersect, normalised_A);
         } else {
             // Generate first (probably non-maximal) successor
-            // (right_intersect-A)
-            searchSuccessors[out++] = Successor.valueOf(Successor.Type.OBSERVABLE, A_p, rightIntersect, normalised_Am1);
+            // (right_intersect-B)
+            searchSuccessors[out++] = Successor.valueOf(Successor.Type.OBSERVABLE, B_p, rightIntersect, normalised_Bm1);
 
             // Generate all guaranteed-maximal successors.
             // Should generate B-A of them.
-            int last_ind = normalised_A;
-            int cur_ind = normalise(A + 1, poly.vertCount);
+            int last_ind = normalised_B;
+            int cur_ind = normalise(B + 1, poly.vertCount);
 
             int counter = 0;
-            while (last_ind != normalised_B) {
+            while (last_ind != normalised_A) {
                 counter++;
 
                 // Generate last-cur.
@@ -713,24 +706,24 @@ public class PolyanyaQuery {
                 }
             }
 
-            Validate.isTrue(counter == B - A);
+            Validate.isTrue(counter == A - B);
 
             // Generate last (probably non-maximal) successor
-            // (B-left_intersect)
-            searchSuccessors[out++] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, B_p, normalised_B);
+            // (A-left_intersect)
+            searchSuccessors[out++] = Successor.valueOf(Successor.Type.OBSERVABLE, leftIntersect, A_p, normalised_A);
         }
 
         if (leftLiesVertex) {
-            // Generate non-observable from left_intersect to Bp1_p
-            // if left_intersect != Bp1_p.
+            // Generate non-observable from left_intersect to Ap1_p
+            // if left_intersect != Ap1_p.
             // Generate non-observable up to end.
-            // Generate left_intersect-Bp1, turning at left.
-            if (!vEqual2D(leftIntersect, Bp1_p)) {
-                searchSuccessors[out++] = Successor.valueOf(Successor.Type.LEFT_NON_OBSERVABLE, Bp1_p, leftIntersect, normalised_B);
+            // Generate left_intersect-Ap1, turning at left.
+            if (!vEqual2D(leftIntersect, Ap1_p)) {
+                searchSuccessors[out++] = Successor.valueOf(Successor.Type.LEFT_NON_OBSERVABLE, Ap1_p, leftIntersect, normalised_A);
             }
 
-            int last_ind = normalised_Bp1;
-            int cur_ind = normalise(B + 2, poly.vertCount);
+            int last_ind = normalised_Ap1;
+            int cur_ind = normalise(A + 2, poly.vertCount);
 
             int normalised_left_ind = normalise(leftIndex, poly.vertCount);
             while (last_ind != normalised_left_ind) {
