@@ -15,8 +15,7 @@ import static java.lang.Math.*;
  */
 public final class PolyanyaHelper {
 
-    private final static double EPSILON = 1e-4f;
-    private final static float[] PLOY_PICK_EXT = new float[]{2, 4, 2};
+    private final static double EPSILON = 1f;
 
     /**
      * @return true-指定Poly的邻接traversable poly数量小于等于1;false-指定Poly的邻接traversable poly数量大于1
@@ -181,7 +180,7 @@ public final class PolyanyaHelper {
         float[] deltaRotated = new float[]{left[2] - right[2], left[1] - right[1], right[0] - left[0]};
 
         // point + (number/denom)*deltaRotated 是point点在线段[left,right]上的投影
-        Validate.isTrue(abs(triArea2D(left, vAdd(point, vScale(deltaRotated, (float) (number / denom))), right)) < EPSILON);
+        // Validate.isTrue(abs(triArea2D(left, vAdd(point, vScale(deltaRotated, (float) (number / denom))), right)) < EPSILON);
 
         return vAdd(point, vScale(deltaRotated, (float) (2.0 * number / denom)));
     }
@@ -256,10 +255,6 @@ public final class PolyanyaHelper {
             System.arraycopy(meshTile.data.verts, poly.verts[i] * 3, verts, i * 3, 3);
         }
 
-        if (!pointInPolygon(pos, verts, nv)) {
-            return PolyContainment.valueOf(PolyContainment.Type.OUTSIDE, -1, -1, -1);
-        }
-
         float[] last = new float[3];
         vSet(last, verts[(nv - 1) * 3], verts[(nv - 1) * 3 + 1], verts[(nv - 1) * 3 + 2]);
         if (vEqual(pos, last)) {
@@ -278,6 +273,10 @@ public final class PolyanyaHelper {
                 return PolyContainment.valueOf(PolyContainment.Type.ON_EDGE, poly.neis[j] - 1, poly.verts[i], poly.verts[j]);
             }
         }
+
+//        if (!pointInPolygon(pos, verts, nv)) {
+//            return PolyContainment.valueOf(PolyContainment.Type.OUTSIDE, -1, -1, -1);
+//        }
         return PolyContainment.valueOf(PolyContainment.Type.INSIDE, -1, -1, -1);
     }
 }

@@ -23,6 +23,8 @@ import java.util.Optional;
 public class DetourCommon {
 
     static float EPS = 1e-4f;
+    // 在2D平面两点之间的坐标误差在1单位之内都可视为相同，这里选用2是给了X方向和Z方向各1单位误差允许
+    static float eps2D = 2f;
 
     /// Performs a scaled vector addition. (@p v1 + (@p v2 * @p s))
     /// @param[out] dest The result vector. [(x, y, z)]
@@ -220,7 +222,7 @@ public class DetourCommon {
     // @return True if the points are considered to be at the same location in xz-plane.
     public static boolean vEqual2D(float[] p0, float[] p1) {
         float d = vDist2DSqr(p0, p1);
-        return d < thr;
+        return d < eps2D;
     }
 
     /// Derives the dot product of two vectors on the xz-plane. (@p u . @p v)

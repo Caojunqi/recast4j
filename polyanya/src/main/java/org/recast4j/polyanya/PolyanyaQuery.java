@@ -99,9 +99,9 @@ public class PolyanyaQuery {
                 float[] root = node.root == -1 ? startPos : getVertexPoint(node.root);
                 float[] rootGoal = vSub(goalPos, root);
                 int finalRoot;
-                if (vCross2D(rootGoal, vSub(node.left, root)) < -EPSILON) {
+                if (vCross2D(rootGoal, vSub(node.left, root)) > EPSILON) {
                     finalRoot = node.leftVertex;
-                } else if (vCross2D(vSub(node.right, root), rootGoal) < -EPSILON) {
+                } else if (vCross2D(vSub(node.right, root), rootGoal) > EPSILON) {
                     finalRoot = node.rightVertex;
                 } else {
                     finalRoot = node.root;
@@ -160,7 +160,7 @@ public class PolyanyaQuery {
                 // is the thing we want to push.
                 SearchNode n;
                 if (curNode.parent != null) {
-                    n = node;
+                    n = curNode;
                 } else {
                     n = curNode;
                     n.parent = node;
@@ -221,7 +221,9 @@ public class PolyanyaQuery {
         SearchNode curNode = finalNode;
         while (curNode != null) {
             float[] point = curNode.root == -1 ? startPos : getVertexPoint(curNode.root);
-            stack.push(point);
+            if (!vEqual2D(point, stack.peek())) {
+                stack.push(point);
+            }
             curNode = curNode.parent;
         }
 
@@ -333,16 +335,16 @@ public class PolyanyaQuery {
                     if (rightG == -1) {
                         rightG = getG(parent, parent.right);
                     }
-                    out = doPushNode(parent.rightVertex, rightG, succ, leftVertex, rightVertex, neiPolyIndex, nodes, out);
+                    out = doPushNode(parent, parent.rightVertex, rightG, succ, leftVertex, rightVertex, neiPolyIndex, nodes, out);
                     break;
                 case OBSERVABLE:
-                    out = doPushNode(parent.root, parent.g, succ, leftVertex, rightVertex, neiPolyIndex, nodes, out);
+                    out = doPushNode(parent, parent.root, parent.g, succ, leftVertex, rightVertex, neiPolyIndex, nodes, out);
                     break;
                 case LEFT_NON_OBSERVABLE:
                     if (leftG == -1) {
                         leftG = getG(parent, parent.left);
                     }
-                    out = doPushNode(parent.leftVertex, leftG, succ, leftVertex, rightVertex, neiPolyIndex, nodes, out);
+                    out = doPushNode(parent, parent.leftVertex, leftG, succ, leftVertex, rightVertex, neiPolyIndex, nodes, out);
                     break;
                 default:
                     throw new IllegalStateException("This should not be reachable!!");
@@ -356,7 +358,7 @@ public class PolyanyaQuery {
         return parent.g + vDist2D(parentRoot, newRoot);
     }
 
-    private int doPushNode(int root, double g, Successor succ, int leftVertex, int rightVertex, int nextPolyIndex, SearchNode[] nodes, int out) {
+    private int doPushNode(SearchNode parent, int root, double g, Successor succ, int leftVertex, int rightVertex, int nextPolyIndex, SearchNode[] nodes, int out) {
         if (root != -1) {
             Validate.isTrue(root >= 0 && root < rootGValues.length);
             if (rootSearchIds[root] != searchId) {
@@ -375,7 +377,7 @@ public class PolyanyaQuery {
                 }
             }
         }
-        nodes[out++] = SearchNode.valueOf(null, root, succ.left, succ.right, leftVertex, rightVertex, nextPolyIndex, g, g);
+        nodes[out++] = SearchNode.valueOf(parent, root, succ.left, succ.right, leftVertex, rightVertex, nextPolyIndex, g, g);
         return out;
     }
 
